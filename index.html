@@ -1,0 +1,3642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoldenShadow: Dam Infiltration</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
+    <!-- Include Socket.io and Multiplayer scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/universal-multiplayer.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+            background-color: #000;
+        }
+        #gameCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+        }
+        #score, #health, #ammo {
+            margin-bottom: 10px;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        #health {
+            color: #ff5555;
+        }
+        #ammo {
+            color: #ffaa00;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #gameOver, #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 200;
+        }
+        #gameOver {
+            display: none;
+        }
+        h1 {
+            font-size: 48px;
+            color: #ffcc00;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+            margin-bottom: 30px;
+        }
+        h2 {
+            font-size: 36px;
+            color: #ff5555;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #ffcc00;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #ffd700;
+            transform: scale(1.05);
+        }
+        #damageOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0);
+            pointer-events: none;
+            z-index: 150;
+            transition: background-color 0.3s ease;
+        }
+        .weapon {
+            position: absolute;
+            bottom: 50px;
+            right: 50px;
+            width: 200px;
+            height: 150px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #muzzleFlash {
+            position: absolute;
+            bottom: 150px;
+            right: 130px;
+            width: 100px;
+            height: 100px;
+            z-index: 101;
+            display: none;
+            pointer-events: none;
+        }
+        #instructions {
+            max-width: 600px;
+            text-align: center;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .key {
+            background-color: #333;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin: 0 3px;
+        }
+        #objective {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            z-index: 100;
+            font-size: 18px;
+            color: #ffcc00;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        #timer {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            text-align: right;
+            z-index: 100;
+            font-size: 18px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .reload-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffcc00;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        /* Enhanced weapon styling */
+        .weapon-model {
+            position: absolute;
+            bottom: 0px;
+            right: 0px;
+            width: 300px;
+            height: 200px;
+            z-index: 100;
+            pointer-events: none;
+            transform-origin: bottom right;
+        }
+        /* Particle effects */
+        .particle {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 90;
+        }
+        /* Debug info */
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #fff;
+            font-size: 12px;
+            font-family: monospace;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            display: none;
+        }
+        
+        /* Multiplayer UI styles */
+        #mpInfo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+            display: none;
+            z-index: 300;
+        }
+        #playerNameInput, #roomCodeInput {
+            padding: 8px;
+            border-radius: 3px;
+            border: none;
+            outline: none;
+            width: 200px;
+            margin-bottom: 10px;
+        }
+        #roomCodeInput {
+            text-transform: uppercase;
+        }
+        .mp-button {
+            background-color: #ffcc00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 0 5px;
+        }
+        .mp-button:hover {
+            background-color: #ffd700;
+            transform: scale(1.05);
+        }
+        
+        /* Jump indicator */
+        #jumpIndicator {
+            position: absolute;
+            bottom: 100px;
+            left: 10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            background-color: red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="health">Health: 100</div>
+        <div id="ammo">Ammo: 30/90</div>
+    </div>
+    
+    <div id="objective">Objective: Infiltrate the dam and eliminate ninja guards</div>
+    <div id="timer">Time: 5:00</div>
+    
+    <svg id="crosshair" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="48" stroke="rgba(255,255,255,0.8)" stroke-width="2" fill="none"/>
+        <circle cx="50" cy="50" r="5" fill="rgba(255,204,0,0.8)"/>
+        <line x1="0" y1="50" x2="40" y2="50" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>
+        <line x1="60" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>
+        <line x1="50" y1="0" x2="50" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>
+        <line x1="50" y1="60" x2="50" y2="100" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>
+    </svg>
+    
+    <div id="damageOverlay"></div>
+    
+    <div class="reload-message" id="reloadMessage">RELOADING...</div>
+    
+    <svg class="weapon-model" id="weaponModel" viewBox="0 0 300 200">
+        <!-- Gun body -->
+        <rect x="80" y="130" width="160" height="25" fill="#333" rx="2"/>
+        <rect x="90" y="155" width="40" height="30" fill="#222" rx="2"/>
+        
+        <!-- Barrel -->
+        <rect x="180" y="125" width="80" height="15" fill="#444" rx="1"/>
+        <rect x="180" y="140" width="80" height="5" fill="#222"/>
+        
+        <!-- Grip -->
+        <rect x="60" y="130" width="20" height="55" fill="#222" rx="3"/>
+        
+        <!-- Magazine -->
+        <rect x="120" y="155" width="25" height="35" fill="#555" rx="2"/>
+        
+        <!-- Details -->
+        <rect x="190" y="120" width="20" height="5" fill="#555"/>
+        <circle cx="230" cy="132" r="4" fill="#111"/>
+        
+        <!-- Scope -->
+        <rect x="140" y="115" width="40" height="15" fill="#222" rx="1"/>
+        <rect x="150" y="110" width="20" height="5" fill="#333"/>
+        
+        <!-- Trigger -->
+        <rect x="85" y="155" width="5" height="10" fill="#111" rx="1"/>
+    </svg>
+    
+    <div id="muzzleFlash">
+        <svg viewBox="0 0 100 100">
+            <polygon points="50,10 40,40 50,35 45,60 55,60 50,35 60,40" fill="#ffcc00"/>
+            <circle cx="50" cy="50" r="15" fill="#fff"/>
+        </svg>
+    </div>
+    
+    <!-- Updated Start Screen with Multiplayer UI -->
+    <div id="startScreen">
+        <h1>GoldenShadow: Dam Infiltration</h1>
+        <div id="instructions">
+            <p>You are Agent Shadow, infiltrating a secret dam facility overrun by cyber ninjas.</p>
+            <p>Controls: <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to move, <span class="key">Space</span> to jump, <span class="key">Mouse</span> to aim, <span class="key">Left Click</span> to shoot, <span class="key">R</span> to reload, <span class="key">Shift</span> to run</p>
+            <p>Complete your mission before time runs out!</p>
+        </div>
+        
+        <!-- Multiplayer UI -->
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="playerNameInput" placeholder="Your Agent Name" value="Agent Shadow">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="roomCodeInput" placeholder="Room Code (optional)">
+            </div>
+            <div style="display: flex; justify-content: center; gap: 10px;">
+                <button id="createRoomBtn" class="mp-button">CREATE ROOM</button>
+                <button id="joinRoomBtn" class="mp-button">JOIN ROOM</button>
+                <button id="startButton" class="mp-button">SOLO MISSION</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Multiplayer Room Info Panel -->
+    <div id="mpInfo"></div>
+    
+    <div id="gameOver">
+        <h2 id="gameOverText">Mission Failed!</h2>
+        <div id="finalScore">Score: 0</div>
+        <button id="restartButton">Try Again</button>
+    </div>
+    
+    <div id="debug"></div>
+    
+    <!-- Jump indicator -->
+    <div id="jumpIndicator"></div>
+
+    <script>
+        // Game variables
+        let scene, camera, renderer, world;
+        let player, playerBody, playerHeight = 1.8;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let playerVelocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+        let raycaster, mouse;
+        let bullets = [], enemyBullets = [];
+        let enemies = [];
+        let objects = [];
+        let score = 0;
+        let health = 100;
+        let currentAmmo = 30;
+        let totalAmmo = 90;
+        let isReloading = false;
+        let gameActive = false;
+        let timeRemaining = 300; // 5 minutes in seconds
+        let timer;
+        let damObjects = [];
+        let water;
+        let skybox;
+        let ambientLight, directionalLight;
+        let clock = new THREE.Clock();
+        let playerSpeed = 10; // Base movement speed
+        let runSpeed = 15; // Running speed
+        let isRunning = false;
+        let lastShakeTime = 0;
+        let weaponBobAmount = 0;
+        let weaponBobDirection = 1;
+        let particleEmitters = [];
+        let previousPosition = new THREE.Vector3();
+        let climbableLadders = [];
+        let isClimbing = false;
+        let climbingLadder = null;
+        let climbingSpeed = 5;
+        let jumpVelocity = 15; // Increased jump velocity for better jumping
+        let debug = false;
+        let lastJumpTime = 0; // Track when the player last jumped
+        
+        // Variables for improved camera control
+        let cameraYaw = 0;
+        let cameraPitch = 0;
+        let mouseSensitivity = 0.002;
+        
+        // Multiplayer variables
+        let remotePlayers = {};
+        let playerName = "Agent Shadow" + Math.floor(Math.random() * 1000);
+        let multiplayer;
+        let shareableUrl = "";
+        let roomIdFromUrl = new URLSearchParams(window.location.search).get('room');
+        let remotePlayerMeshes = {};
+        
+        // Initialize the game
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x88ccff, 0.01);
+            
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.y = playerHeight;
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            // Physics world setup
+            world = new CANNON.World();
+            world.gravity.set(0, -20, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 10;
+            
+            // Create skybox
+            createSkybox();
+            
+            // Create lighting
+            createLights();
+            
+            // Create the dam environment
+            createDamEnvironment();
+            
+            // Create water
+            createWater();
+            
+            // Create player physics body
+            const playerShape = new CANNON.Sphere(1);
+            playerBody = new CANNON.Body({ mass: 5 });
+            playerBody.addShape(playerShape);
+            playerBody.position.set(0, playerHeight, 30);
+            playerBody.linearDamping = 0.6; // Reduced damping to make movement more responsive
+            
+            // Set proper contact properties for better ground detection
+            playerBody.material = new CANNON.Material("playerMaterial");
+            const groundMaterial = new CANNON.Material("groundMaterial");
+            const playerGroundContact = new CANNON.ContactMaterial(
+                playerBody.material,
+                groundMaterial,
+                {
+                    friction: 0.5,
+                    restitution: 0.3 // Slightly bouncy
+                }
+            );
+            world.addContactMaterial(playerGroundContact);
+            
+            world.addBody(playerBody);
+            
+            // Setup raycaster for shooting
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Create enemies
+            createEnemies();
+            
+            // Event listeners
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('pointerlockchange', onPointerLockChange);
+            
+            // Setup multiplayer buttons
+            document.getElementById('createRoomBtn').addEventListener('click', function() {
+                const name = document.getElementById('playerNameInput').value || playerName;
+                window.startRoom(null, name);
+            });
+            
+            document.getElementById('joinRoomBtn').addEventListener('click', function() {
+                const name = document.getElementById('playerNameInput').value || playerName;
+                const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+                if (roomCode) {
+                    window.startRoom(roomCode, name);
+                } else {
+                    alert('Please enter a room code to join');
+                }
+            });
+            
+            document.getElementById('startButton').addEventListener('click', startSoloGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            
+            // Check for room ID in URL
+            if (roomIdFromUrl) {
+                console.log("Room ID found in URL:", roomIdFromUrl);
+                document.getElementById('roomCodeInput').value = roomIdFromUrl;
+            }
+            
+            window.addEventListener('resize', onWindowResize);
+            
+            // Create particle emitters
+            createParticleEmitters();
+            
+            // Store initial position for movement calculations
+            previousPosition.copy(camera.position);
+            
+            // Debug mode toggle with visual feedback
+            window.addEventListener('keydown', function(e) {
+                if (e.code === 'KeyP') {
+                    debug = !debug;
+                    console.log("Debug mode:", debug ? "ON" : "OFF");
+                    document.getElementById('debug').style.display = debug ? 'block' : 'none';
+                    
+                    // Show a temporary message when debug mode is toggled
+                    const debugToggleMessage = document.createElement('div');
+                    debugToggleMessage.style.position = 'absolute';
+                    debugToggleMessage.style.top = '50%';
+                    debugToggleMessage.style.left = '50%';
+                    debugToggleMessage.style.transform = 'translate(-50%, -50%)';
+                    debugToggleMessage.style.color = debug ? 'green' : 'red';
+                    debugToggleMessage.style.fontWeight = 'bold';
+                    debugToggleMessage.style.fontSize = '24px';
+                    debugToggleMessage.style.textShadow = '2px 2px 4px rgba(0,0,0,0.7)';
+                    debugToggleMessage.textContent = debug ? 'Debug Mode: ON' : 'Debug Mode: OFF';
+                    document.body.appendChild(debugToggleMessage);
+                    
+                    setTimeout(() => {
+                        debugToggleMessage.remove();
+                    }, 1500);
+                }
+            });
+            
+            // Start the render loop
+            animate();
+        }
+        
+        function createParticleEmitters() {
+            // Create water mist near the dam
+            particleEmitters.push({
+                position: new THREE.Vector3(0, 0, -52),
+                width: 80,
+                height: 10,
+                depth: 5,
+                particleCount: 100,
+                particles: [],
+                color: '#ffffff',
+                size: { min: 1, max: 3 },
+                speed: { min: 0.5, max: 2 },
+                lifetime: { min: 2, max: 5 },
+                opacity: 0.3,
+                update: function(delta) {
+                    // Create new particles
+                    if (this.particles.length < this.particleCount) {
+                        const particle = document.createElement('div');
+                        particle.className = 'particle';
+                        particle.style.backgroundColor = this.color;
+                        particle.style.opacity = this.opacity;
+                        
+                        // Random position within emitter volume
+                        const x = this.position.x + (Math.random() - 0.5) * this.width;
+                        const y = this.position.y + Math.random() * this.height;
+                        const z = this.position.z + (Math.random() - 0.5) * this.depth;
+                        
+                        // Random size
+                        const size = this.size.min + Math.random() * (this.size.max - this.size.min);
+                        
+                        // Random velocity (mostly upward)
+                        const vx = (Math.random() - 0.5) * 0.5;
+                        const vy = this.speed.min + Math.random() * (this.speed.max - this.speed.min);
+                        const vz = (Math.random() - 0.5) * 0.5;
+                        
+                        // Random lifetime
+                        const lifetime = this.lifetime.min + Math.random() * (this.lifetime.max - this.lifetime.min);
+                        
+                        const particleObj = {
+                            element: particle,
+                            position: new THREE.Vector3(x, y, z),
+                            velocity: new THREE.Vector3(vx, vy, vz),
+                            size: size,
+                            lifetime: lifetime,
+                            age: 0
+                        };
+                        
+                        document.body.appendChild(particle);
+                        this.particles.push(particleObj);
+                    }
+                    
+                    // Update existing particles
+                    for (let i = this.particles.length - 1; i >= 0; i--) {
+                        const p = this.particles[i];
+                        
+                        // Update age and position
+                        p.age += delta;
+                        p.position.x += p.velocity.x * delta;
+                        p.position.y += p.velocity.y * delta;
+                        p.position.z += p.velocity.z * delta;
+                        
+                        // Apply gravity
+                        p.velocity.y -= 0.1 * delta;
+                        
+                        // Convert 3D position to screen position
+                        const screenPos = worldToScreen(p.position);
+                        
+                        // Update particle element if it's on screen
+                        if (screenPos) {
+                            p.element.style.left = screenPos.x - p.size / 2 + 'px';
+                            p.element.style.top = screenPos.y - p.size / 2 + 'px';
+                            p.element.style.width = p.size + 'px';
+                            p.element.style.height = p.size + 'px';
+                            
+                            // Fade out as particle ages
+                            const lifeRatio = 1 - p.age / p.lifetime;
+                            p.element.style.opacity = this.opacity * lifeRatio;
+                        } else {
+                            p.element.style.opacity = '0';
+                        }
+                        
+                        // Remove dead particles
+                        if (p.age >= p.lifetime) {
+                            p.element.remove();
+                            this.particles.splice(i, 1);
+                        }
+                    }
+                }
+            });
+        }
+        
+        function worldToScreen(worldPos) {
+            // Convert 3D world position to 2D screen position
+            const vector = worldPos.clone();
+            vector.project(camera);
+            
+            // Check if the point is in front of the camera
+            if (vector.z > 1) {
+                return null;
+            }
+            
+            vector.x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            vector.y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
+            
+            return {
+                x: vector.x,
+                y: vector.y
+            };
+        }
+        
+        function createSkybox() {
+            // Create a much larger skybox sphere instead of a box
+            const size = 5000; // Much larger skybox
+            const skyGeometry = new THREE.SphereGeometry(size, 64, 64);
+            skyGeometry.scale(-1, 1, 1); // Flip the geometry inside-out
+            
+            // Create a gradient texture for the sky
+            const textureSize = 1024;
+            const skyCanvas = document.createElement('canvas');
+            skyCanvas.width = textureSize;
+            skyCanvas.height = textureSize;
+            const ctx = skyCanvas.getContext('2d');
+            
+            // Create a gradient from top to bottom
+            const gradient = ctx.createLinearGradient(0, 0, 0, textureSize);
+            gradient.addColorStop(0, '#0a1a40'); // Dark blue at top
+            gradient.addColorStop(0.4, '#1e3c72'); // Medium blue
+            gradient.addColorStop(0.7, '#4b6cb7'); // Lighter blue
+            gradient.addColorStop(1, '#76b0e0'); // Light blue at horizon
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add some clouds near the horizon
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * textureSize;
+                const y = textureSize * 0.7 + Math.random() * (textureSize * 0.3);
+                const radius = 20 + Math.random() * 60;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Add some stars in the upper part
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for (let i = 0; i < 200; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * (textureSize * 0.5);
+                const radius = 1 + Math.random() * 2;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const skyTexture = new THREE.CanvasTexture(skyCanvas);
+            
+            // Create the material with the texture
+            const skyMaterial = new THREE.MeshBasicMaterial({
+                map: skyTexture,
+                side: THREE.BackSide // Render the inside of the sphere
+            });
+            
+            skybox = new THREE.Mesh(skyGeometry, skyMaterial);
+            scene.add(skybox);
+        }
+        
+        function createLights() {
+            // Ambient light
+            ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+            
+            // Directional light (sun)
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            directionalLight.shadow.camera.left = -100;
+            directionalLight.shadow.camera.right = 100;
+            directionalLight.shadow.camera.top = 100;
+            directionalLight.shadow.camera.bottom = -100;
+            scene.add(directionalLight);
+            
+            // Add some point lights around the dam for atmosphere
+            const colors = [0xff5555, 0x55ff55, 0x5555ff, 0xffff55];
+            for (let i = 0; i < 8; i++) {
+                const x = (Math.random() - 0.5) * 100;
+                const z = (Math.random() - 0.5) * 100;
+                const y = 5 + Math.random() * 10;
+                
+                const pointLight = new THREE.PointLight(colors[i % colors.length], 0.8, 20);
+                pointLight.position.set(x, y, z);
+                scene.add(pointLight);
+                
+                // Add a small sphere to represent the light source
+                const lightSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.2, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: colors[i % colors.length] })
+                );
+                lightSphere.position.copy(pointLight.position);
+                scene.add(lightSphere);
+            }
+        }
+        
+        function createDamEnvironment() {
+            // Create infinite ground plane
+            const groundSize = 5000; // Very large ground plane
+            const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x556643,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            // Create texture for the ground
+            const textureSize = 512;
+            const groundCanvas = document.createElement('canvas');
+            groundCanvas.width = textureSize;
+            groundCanvas.height = textureSize;
+            const ctx = groundCanvas.getContext('2d');
+            
+            // Base color
+            ctx.fillStyle = '#556643';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add some noise/texture
+            ctx.fillStyle = '#4a5a3a';
+            for (let i = 0; i < 5000; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = Math.random() * 3 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            // Add some larger patches
+            ctx.fillStyle = '#617a4b';
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = 20 + Math.random() * 40;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const groundTexture = new THREE.CanvasTexture(groundCanvas);
+            groundTexture.wrapS = THREE.RepeatWrapping;
+            groundTexture.wrapT = THREE.RepeatWrapping;
+            groundTexture.repeat.set(50, 50); // Repeat the texture many times
+            
+            groundMaterial.map = groundTexture;
+            
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Add ground physics - infinite plane
+            const groundShape = new CANNON.Plane();
+            const groundBody = new CANNON.Body({ mass: 0 });
+            groundBody.addShape(groundShape);
+            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+            world.addBody(groundBody);
+            
+            // Create the dam structure
+            createDamStructure();
+            
+            // Add trees and rocks
+            addEnvironmentDetails();
+        }
+        
+        function createDamStructure() {
+            // Main dam wall
+            const damWallGeometry = new THREE.BoxGeometry(100, 30, 5);
+            const concreteMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.7,
+                metalness: 0.2
+            });
+            
+            // Add texture to the concrete
+            const textureSize = 512;
+            const concreteCanvas = document.createElement('canvas');
+            concreteCanvas.width = textureSize;
+            concreteCanvas.height = textureSize;
+            const ctx = concreteCanvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add noise and cracks
+            ctx.fillStyle = '#777777';
+            for (let i = 0; i < 5000; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = Math.random() * 2 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            // Add some cracks
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                
+                // Create a jagged line for the crack
+                let currentX = x;
+                let currentY = y;
+                const length = Math.random() * 50 + 20;
+                for (let j = 0; j < length; j++) {
+                    currentX += (Math.random() - 0.5) * 5;
+                    currentY += (Math.random() - 0.5) * 5;
+                    ctx.lineTo(currentX, currentY);
+                }
+                
+                ctx.stroke();
+            }
+            
+            const concreteTexture = new THREE.CanvasTexture(concreteCanvas);
+            concreteTexture.wrapS = THREE.RepeatWrapping;
+            concreteTexture.wrapT = THREE.RepeatWrapping;
+            concreteTexture.repeat.set(4, 4);
+            
+            concreteMaterial.map = concreteTexture;
+            
+            const damWall = new THREE.Mesh(damWallGeometry, concreteMaterial);
+            damWall.position.set(0, 15, -50);
+            damWall.castShadow = true;
+            damWall.receiveShadow = true;
+            scene.add(damWall);
+            damObjects.push(damWall);
+            objects.push(damWall);
+            
+            // Add physics to the dam wall
+            const damWallShape = new CANNON.Box(new CANNON.Vec3(50, 15, 2.5));
+            const damWallBody = new CANNON.Body({ mass: 0 });
+            damWallBody.addShape(damWallShape);
+            damWallBody.position.set(0, 15, -50);
+            world.addBody(damWallBody);
+            
+            // Dam control building
+            const buildingGeometry = new THREE.BoxGeometry(20, 10, 15);
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+                color: 0x775544,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            building.position.set(30, 5, -40);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+            damObjects.push(building);
+            objects.push(building);
+            
+            // Add physics to the building
+            const buildingShape = new CANNON.Box(new CANNON.Vec3(10, 5, 7.5));
+            const buildingBody = new CANNON.Body({ mass: 0 });
+            buildingBody.addShape(buildingShape);
+            buildingBody.position.set(30, 5, -40);
+            world.addBody(buildingBody);
+            
+            // Add windows to the building
+            const windowGeometry = new THREE.PlaneGeometry(2, 3);
+            const windowMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88ccff,
+                roughness: 0.3,
+                metalness: 0.8,
+                emissive: 0x114488,
+                emissiveIntensity: 0.5
+            });
+            
+            // Front windows
+            for (let i = -1; i <= 1; i += 2) {
+                const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                windowMesh.position.set(30 + i * 5, 5, -32.51);
+                windowMesh.rotation.y = Math.PI;
+                scene.add(windowMesh);
+            }
+            
+            // Side windows
+            for (let i = -1; i <= 1; i += 2) {
+                const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                windowMesh.position.set(40.01, 5, -40 + i * 4);
+                windowMesh.rotation.y = -Math.PI / 2;
+                scene.add(windowMesh);
+            }
+            
+            // Add a door
+            const doorGeometry = new THREE.PlaneGeometry(3, 6);
+            const doorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x332211,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(30, 3, -32.51);
+            door.rotation.y = Math.PI;
+            scene.add(door);
+            
+            // Add stairs to the building
+            const stairsGeometry = new THREE.BoxGeometry(10, 1, 8);
+            const stairs = new THREE.Mesh(stairsGeometry, concreteMaterial);
+            stairs.position.set(30, 0.5, -30);
+            stairs.castShadow = true;
+            stairs.receiveShadow = true;
+            scene.add(stairs);
+            damObjects.push(stairs);
+            objects.push(stairs);
+            
+            // Add physics to the stairs
+            const stairsShape = new CANNON.Box(new CANNON.Vec3(5, 0.5, 4));
+            const stairsBody = new CANNON.Body({ mass: 0 });
+            stairsBody.addShape(stairsShape);
+            stairsBody.position.set(30, 0.5, -30);
+            world.addBody(stairsBody);
+            
+            // Add railings to the top of the dam
+            const railingMaterial = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.7,
+                metalness: 0.5
+            });
+            
+            // Horizontal railing along the dam
+            const railingTopGeometry = new THREE.CylinderGeometry(0.2, 0.2, 100, 8);
+            const railingTop = new THREE.Mesh(railingTopGeometry, railingMaterial);
+            railingTop.position.set(0, 30.5, -48);
+            railingTop.rotation.z = Math.PI / 2;
+            railingTop.castShadow = true;
+            scene.add(railingTop);
+            objects.push(railingTop);
+            
+            // Vertical posts
+            for (let i = -45; i <= 45; i += 5) {
+                const postGeometry = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
+                const post = new THREE.Mesh(postGeometry, railingMaterial);
+                post.position.set(i, 29.5, -48);
+                post.castShadow = true;
+                scene.add(post);
+                objects.push(post);
+            }
+            
+            // Add climbable ladders to the sides of the dam
+            createClimbableLadder(-40, 0, -48, 30);
+            createClimbableLadder(40, 0, -48, 30);
+            
+            // Create a ramp to the top of the dam
+            createRamp(-20, 0, -20, 30, 30, 5);
+            
+            // Add pipes and industrial elements
+            for (let i = -40; i <= 40; i += 20) {
+                createPipe(i, 10, -45, 3, 20);
+            }
+            
+            // Create platforms and walkways
+            createWalkway(0, 20, -40, 80, 5);
+            createWalkway(-30, 10, -45, 5, 20, Math.PI / 2);
+            createWalkway(30, 10, -45, 5, 20, Math.PI / 2);
+            
+            // Create control panels
+            createControlPanel(25, 5, -33, 0);
+            createControlPanel(35, 5, -33, 0);
+            createControlPanel(35, 5, -47, Math.PI);
+        }
+        
+        function createClimbableLadder(x, y, z, height) {
+            const rungs = Math.floor(height / 1.5);
+            const ladderWidth = 2;
+            
+            // Material for the ladder
+            const ladderMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.7,
+                metalness: 0.5
+            });
+            
+            // Create ladder group
+            const ladderGroup = new THREE.Group();
+            ladderGroup.position.set(x, y, z);
+            scene.add(ladderGroup);
+            
+            // Side rails
+            for (let side = -1; side <= 1; side += 2) {
+                const railGeometry = new THREE.CylinderGeometry(0.1, 0.1, height, 8);
+                const rail = new THREE.Mesh(railGeometry, ladderMaterial);
+                rail.position.set(side * ladderWidth / 2, height / 2, 0.5);
+                rail.castShadow = true;
+                ladderGroup.add(rail);
+            }
+            
+            // Rungs
+            for (let i = 0; i < rungs; i++) {
+                const rungGeometry = new THREE.CylinderGeometry(0.1, 0.1, ladderWidth + 0.2, 8);
+                const rung = new THREE.Mesh(rungGeometry, ladderMaterial);
+                rung.position.set(0, 1.5 * i + 1, 0.5);
+                rung.rotation.z = Math.PI / 2;
+                rung.castShadow = true;
+                ladderGroup.add(rung);
+            }
+            
+            // Create invisible collision box for the ladder
+            const ladderCollisionGeometry = new THREE.BoxGeometry(ladderWidth, height, 1);
+            const ladderCollisionMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff0000, 
+                transparent: true, 
+                opacity: debug ? 0.3 : 0
+            });
+            const ladderCollision = new THREE.Mesh(ladderCollisionGeometry, ladderCollisionMaterial);
+            ladderCollision.position.set(0, height / 2, 0.5);
+            ladderGroup.add(ladderCollision);
+            
+            // Add the ladder to the climbable ladders list
+            climbableLadders.push({
+                mesh: ladderCollision,
+                position: new THREE.Vector3(x, y, z),
+                height: height,
+                width: ladderWidth
+            });
+            
+            // Add physics body for collision detection (thin but solid)
+            const ladderShape = new CANNON.Box(new CANNON.Vec3(ladderWidth / 2, height / 2, 0.1));
+            const ladderBody = new CANNON.Body({ mass: 0 });
+            ladderBody.addShape(ladderShape);
+            ladderBody.position.set(x, y + height / 2, z + 0.5);
+            world.addBody(ladderBody);
+            
+            return ladderGroup;
+        }
+        
+        function createRamp(x, y, z, length, height, width) {
+            // Calculate the angle of the ramp based on height and length
+            const angle = Math.atan2(height, length);
+            const rampLength = Math.sqrt(length * length + height * height);
+            
+            // Create ramp geometry
+            const rampGeometry = new THREE.BoxGeometry(width, 1, rampLength);
+            const rampMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            // Create texture for the ramp
+            const textureSize = 512;
+            const rampCanvas = document.createElement('canvas');
+            rampCanvas.width = textureSize;
+            rampCanvas.height = textureSize;
+            const ctx = rampCanvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add grip texture - horizontal lines
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < textureSize; i += 8) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(textureSize, i);
+                ctx.stroke();
+            }
+            
+            const rampTexture = new THREE.CanvasTexture(rampCanvas);
+            rampTexture.wrapS = THREE.RepeatWrapping;
+            rampTexture.wrapT = THREE.RepeatWrapping;
+            rampTexture.repeat.set(width / 2, rampLength / 2);
+            
+            rampMaterial.map = rampTexture;
+            
+            const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
+            
+            // Position the ramp - we need to offset it because the rotation happens around the center
+            ramp.position.set(
+                x, 
+                y + height / 2, 
+                z - length / 2
+            );
+            
+            // Rotate the ramp
+            ramp.rotation.x = -angle;
+            
+            ramp.castShadow = true;
+            ramp.receiveShadow = true;
+            scene.add(ramp);
+            damObjects.push(ramp);
+            objects.push(ramp);
+            
+            // Add physics to the ramp
+            const rampShape = new CANNON.Box(new CANNON.Vec3(width / 2, 0.5, rampLength / 2));
+            const rampBody = new CANNON.Body({ mass: 0 });
+            rampBody.addShape(rampShape);
+            
+            // Match the position and rotation of the visual ramp
+            rampBody.position.copy(ramp.position);
+            
+            // Convert Three.js rotation to Cannon.js quaternion
+            const quaternion = new CANNON.Quaternion();
+            quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -angle);
+            rampBody.quaternion = quaternion;
+            
+            world.addBody(rampBody);
+            
+            // Add railings to the ramp
+            const railingMaterial = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.7,
+                metalness: 0.5
+            });
+            
+            // Side railings
+            for (let side = -1; side <= 1; side += 2) {
+                // Create a group for the railing that will be rotated with the ramp
+                const railingGroup = new THREE.Group();
+                railingGroup.position.copy(ramp.position);
+                railingGroup.rotation.copy(ramp.rotation);
+                scene.add(railingGroup);
+                
+                // Top rail along the length
+                const railGeometry = new THREE.CylinderGeometry(0.1, 0.1, rampLength, 8);
+                const rail = new THREE.Mesh(railGeometry, railingMaterial);
+                rail.position.set(side * width / 2, 1.5, 0);
+                rail.rotation.x = Math.PI / 2;
+                rail.castShadow = true;
+                railingGroup.add(rail);
+                
+                // Posts
+                const postsCount = Math.ceil(rampLength / 3);
+                const postSpacing = rampLength / (postsCount - 1);
+                
+                for (let i = 0; i < postsCount; i++) {
+                    const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+                    const post = new THREE.Mesh(postGeometry, railingMaterial);
+                    post.position.set(side * width / 2, 0.75, -rampLength / 2 + i * postSpacing);
+                    post.castShadow = true;
+                    railingGroup.add(post);
+                }
+            }
+            
+            return ramp;
+        }
+        
+        function createPipe(x, y, z, radius, height) {
+            const pipeMaterial = new THREE.MeshStandardMaterial({
+                color: 0x995533,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            
+            // Main pipe
+            const pipeGeometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+            const pipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
+            pipe.position.set(x, y, z);
+            pipe.castShadow = true;
+            pipe.receiveShadow = true;
+            scene.add(pipe);
+            damObjects.push(pipe);
+            objects.push(pipe);
+            
+            // Add physics to the pipe
+            const pipeShape = new CANNON.Cylinder(radius, radius, height, 8);
+            const pipeBody = new CANNON.Body({ mass: 0 });
+            pipeBody.addShape(pipeShape);
+            pipeBody.position.set(x, y, z);
+            world.addBody(pipeBody);
+            
+            // Add flanges to the pipe
+            const flangeGeometry = new THREE.CylinderGeometry(radius * 1.5, radius * 1.5, 0.5, 16);
+            const flangeMaterial = new THREE.MeshStandardMaterial({
+                color: 0x777777,
+                roughness: 0.5,
+                metalness: 0.7
+            });
+            
+            // Top flange
+            const topFlange = new THREE.Mesh(flangeGeometry, flangeMaterial);
+            topFlange.position.set(x, y + height / 2 - 0.25, z);
+            topFlange.castShadow = true;
+            topFlange.receiveShadow = true;
+            scene.add(topFlange);
+            objects.push(topFlange);
+            
+            // Bottom flange
+            const bottomFlange = new THREE.Mesh(flangeGeometry, flangeMaterial);
+            bottomFlange.position.set(x, y - height / 2 + 0.25, z);
+            bottomFlange.castShadow = true;
+            bottomFlange.receiveShadow = true;
+            scene.add(bottomFlange);
+            objects.push(bottomFlange);
+            
+            // Add a valve wheel
+            const wheelGeometry = new THREE.TorusGeometry(radius * 1.2, 0.3, 8, 24);
+            const wheelMaterial = new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                roughness: 0.5,
+                metalness: 0.5
+            });
+            
+            const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel.position.set(x, y, z + radius + 1);
+            wheel.rotation.x = Math.PI / 2;
+            wheel.castShadow = true;
+            wheel.receiveShadow = true;
+            scene.add(wheel);
+            objects.push(wheel);
+            
+            // Add spokes to the wheel
+            for (let i = 0; i < 4; i++) {
+                const spokeGeometry = new THREE.CylinderGeometry(0.1, 0.1, radius * 2, 8);
+                const spoke = new THREE.Mesh(spokeGeometry, wheelMaterial);
+                spoke.position.set(x, y, z + radius + 1);
+                spoke.rotation.x = Math.PI / 2;
+                spoke.rotation.z = i * Math.PI / 4;
+                spoke.castShadow = true;
+                scene.add(spoke);
+                objects.push(spoke);
+            }
+        }
+        
+        function createWalkway(x, y, z, width, depth, rotation = 0) {
+            // Create the walkway platform
+            const walkwayGeometry = new THREE.BoxGeometry(width, 0.5, depth);
+            const walkwayMaterial = new THREE.MeshStandardMaterial({
+                color: 0x555555,
+                roughness: 0.8,
+                metalness: 0.3
+            });
+            
+            // Add texture to the walkway
+            const textureSize = 512;
+            const walkwayCanvas = document.createElement('canvas');
+            walkwayCanvas.width = textureSize;
+            walkwayCanvas.height = textureSize;
+            const ctx = walkwayCanvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add grid pattern
+            ctx.fillStyle = '#444444';
+            const gridSize = 32;
+            for (let i = 0; i < textureSize; i += gridSize) {
+                for (let j = 0; j < textureSize; j += gridSize) {
+                    if ((i / gridSize + j / gridSize) % 2 === 0) {
+                        ctx.fillRect(i, j, gridSize, gridSize);
+                    }
+                }
+            }
+            
+            // Add some small details
+            ctx.fillStyle = '#666666';
+            for (let i = 0; i < 1000; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = Math.random() * 2 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            const walkwayTexture = new THREE.CanvasTexture(walkwayCanvas);
+            walkwayTexture.wrapS = THREE.RepeatWrapping;
+            walkwayTexture.wrapT = THREE.RepeatWrapping;
+            walkwayTexture.repeat.set(width / 5, depth / 5);
+            
+            walkwayMaterial.map = walkwayTexture;
+            
+            const walkway = new THREE.Mesh(walkwayGeometry, walkwayMaterial);
+            walkway.position.set(x, y, z);
+            walkway.rotation.y = rotation;
+            walkway.castShadow = true;
+            walkway.receiveShadow = true;
+            scene.add(walkway);
+            damObjects.push(walkway);
+            objects.push(walkway);
+            
+            // Add physics to the walkway
+            const walkwayShape = new CANNON.Box(new CANNON.Vec3(width / 2, 0.25, depth / 2));
+            const walkwayBody = new CANNON.Body({ mass: 0 });
+            walkwayBody.addShape(walkwayShape);
+            walkwayBody.position.set(x, y, z);
+            
+            // Apply rotation if needed
+            if (rotation !== 0) {
+                const q = new CANNON.Quaternion();
+                q.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotation);
+                walkwayBody.quaternion = q;
+            }
+            
+            world.addBody(walkwayBody);
+            
+            // Add railings
+            const railingMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.7,
+                metalness: 0.5
+            });
+            
+            // Determine width and depth based on rotation
+            let actualWidth = width;
+            let actualDepth = depth;
+            if (rotation !== 0) {
+                actualWidth = depth;
+                actualDepth = width;
+            }
+            
+            // Side railings (along width)
+            for (let side = -1; side <= 1; side += 2) {
+                // Top horizontal rail
+                const topRailGeometry = new THREE.CylinderGeometry(0.1, 0.1, actualWidth, 8);
+                const topRail = new THREE.Mesh(topRailGeometry, railingMaterial);
+                
+                if (rotation === 0) {
+                    topRail.position.set(x, y + 1.5, z + side * actualDepth / 2);
+                    topRail.rotation.z = Math.PI / 2;
+                } else {
+                    topRail.position.set(x + side * actualDepth / 2, y + 1.5, z);
+                    topRail.rotation.z = Math.PI / 2;
+                    topRail.rotation.y = Math.PI / 2;
+                }
+                
+                topRail.castShadow = true;
+                scene.add(topRail);
+                objects.push(topRail);
+                
+                // Vertical posts
+                const postsCount = Math.ceil(actualWidth / 5);
+                for (let i = 0; i < postsCount; i++) {
+                    const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+                    const post = new THREE.Mesh(postGeometry, railingMaterial);
+                    
+                    if (rotation === 0) {
+                        post.position.set(x - actualWidth / 2 + i * (actualWidth / (postsCount - 1)), y + 0.75, z + side * actualDepth / 2);
+                    } else {
+                        post.position.set(x + side * actualDepth / 2, y + 0.75, z - actualWidth / 2 + i * (actualWidth / (postsCount - 1)));
+                    }
+                    
+                    post.castShadow = true;
+                    scene.add(post);
+                    objects.push(post);
+                }
+            }
+            
+            // End railings (along depth)
+            if (actualWidth > 5) { // Only add end railings for wider platforms
+                for (let side = -1; side <= 1; side += 2) {
+                    // Top horizontal rail
+                    const endRailGeometry = new THREE.CylinderGeometry(0.1, 0.1, actualDepth, 8);
+                    const endRail = new THREE.Mesh(endRailGeometry, railingMaterial);
+                    
+                    if (rotation === 0) {
+                        endRail.position.set(x + side * actualWidth / 2, y + 1.5, z);
+                        endRail.rotation.x = Math.PI / 2;
+                    } else {
+                        endRail.position.set(x, y + 1.5, z + side * actualWidth / 2);
+                        endRail.rotation.x = Math.PI / 2;
+                        endRail.rotation.z = Math.PI / 2;
+                    }
+                    
+                    endRail.castShadow = true;
+                    scene.add(endRail);
+                    objects.push(endRail);
+                    
+                    // Vertical posts
+                    const postsCount = Math.ceil(actualDepth / 5);
+                    for (let i = 0; i < postsCount; i++) {
+                        const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+                        const post = new THREE.Mesh(postGeometry, railingMaterial);
+                        
+                        if (rotation === 0) {
+                            post.position.set(x + side * actualWidth / 2, y + 0.75, z - actualDepth / 2 + i * (actualDepth / (postsCount - 1)));
+                        } else {
+                            post.position.set(x - actualDepth / 2 + i * (actualDepth / (postsCount - 1)), y + 0.75, z + side * actualWidth / 2);
+                        }
+                        
+                        post.castShadow = true;
+                        scene.add(post);
+                        objects.push(post);
+                    }
+                }
+            }
+        }
+        
+        function createControlPanel(x, y, z, rotation = 0) {
+            // Create the panel base
+            const panelGeometry = new THREE.BoxGeometry(3, 2, 0.5);
+            const panelMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.5,
+                metalness: 0.7
+            });
+            
+            const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+            panel.position.set(x, y, z);
+            panel.rotation.y = rotation;
+            panel.castShadow = true;
+            panel.receiveShadow = true;
+            scene.add(panel);
+            objects.push(panel);
+            
+            // Add buttons and lights to the panel
+            const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
+            
+            for (let i = 0; i < 5; i++) {
+                // Create a button
+                const buttonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
+                const buttonMaterial = new THREE.MeshStandardMaterial({
+                    color: colors[i],
+                    roughness: 0.3,
+                    metalness: 0.8,
+                    emissive: colors[i],
+                    emissiveIntensity: 0.5
+                });
+                
+                const button = new THREE.Mesh(buttonGeometry, buttonMaterial);
+                
+                // Position the button on the panel
+                const xOffset = (i - 2) * 0.5;
+                button.position.set(x + xOffset, y + 0.5, z + 0.3);
+                button.rotation.x = Math.PI / 2;
+                
+                // Apply panel rotation
+                if (rotation !== 0) {
+                    button.position.set(x + Math.cos(rotation) * xOffset, y + 0.5, z + Math.sin(rotation) * xOffset);
+                    button.rotation.y = rotation;
+                }
+                
+                button.castShadow = true;
+                scene.add(button);
+                objects.push(button);
+                
+                // Create a small light
+                const lightGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.1, 16);
+                const lightMaterial = new THREE.MeshStandardMaterial({
+                    color: colors[(i + 2) % 5],
+                    roughness: 0.3,
+                    metalness: 0.8,
+                    emissive: colors[(i + 2) % 5],
+                    emissiveIntensity: 0.8
+                });
+                
+                const light = new THREE.Mesh(lightGeometry, lightMaterial);
+                
+                // Position the light on the panel
+                const yOffset = -0.5;
+                light.position.set(x + xOffset, y + yOffset, z + 0.3);
+                light.rotation.x = Math.PI / 2;
+                
+                // Apply panel rotation
+                if (rotation !== 0) {
+                    light.position.set(x + Math.cos(rotation) * xOffset, y + yOffset, z + Math.sin(rotation) * xOffset);
+                    light.rotation.y = rotation;
+                }
+                
+                light.castShadow = true;
+                scene.add(light);
+                objects.push(light);
+                
+                // Add a small screen or dial
+                if (i === 2) { // Center position
+                    const screenGeometry = new THREE.PlaneGeometry(1, 0.75);
+                    const screenMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x88ccff,
+                        roughness: 0.3,
+                        metalness: 0.5,
+                        emissive: 0x113366,
+                        emissiveIntensity: 0.5
+                    });
+                    
+                    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+                    
+                    // Position the screen on the panel
+                    screen.position.set(x, y, z + 0.26);
+                    
+                    // Apply panel rotation
+                    if (rotation !== 0) {
+                        screen.position.set(x, y, z);
+                        screen.position.z += 0.26 * Math.cos(rotation);
+                        screen.position.x -= 0.26 * Math.sin(rotation);
+                        screen.rotation.y = rotation;
+                    }
+                    
+                    screen.castShadow = false;
+                    screen.receiveShadow = true;
+                    scene.add(screen);
+                    objects.push(screen);
+                    
+                    // Add some text or graphics to the screen
+                    const screenCanvas = document.createElement('canvas');
+                    screenCanvas.width = 128;
+                    screenCanvas.height = 96;
+                    const ctx = screenCanvas.getContext('2d');
+                    
+                    // Background
+                    ctx.fillStyle = '#113366';
+                    ctx.fillRect(0, 0, 128, 96);
+                    
+                    // Grid lines
+                    ctx.strokeStyle = '#88ccff';
+                    ctx.lineWidth = 1;
+                    
+                    // Horizontal lines
+                    for (let j = 0; j < 96; j += 16) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, j);
+                        ctx.lineTo(128, j);
+                        ctx.stroke();
+                    }
+                    
+                    // Vertical lines
+                    for (let j = 0; j < 128; j += 16) {
+                        ctx.beginPath();
+                        ctx.moveTo(j, 0);
+                        ctx.lineTo(j, 96);
+                        ctx.stroke();
+                    }
+                    
+                    // Add a sine wave
+                    ctx.strokeStyle = '#ffcc00';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 48);
+                    
+                    for (let j = 0; j < 128; j++) {
+                        const y = 48 + Math.sin(j * 0.1) * 20;
+                        ctx.lineTo(j, y);
+                    }
+                    
+                    ctx.stroke();
+                    
+                    // Add some text
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '10px Arial';
+                    ctx.fillText('DAM CONTROL', 32, 16);
+                    ctx.fillText('PRESSURE: 85%', 32, 86);
+                    
+                    const screenTexture = new THREE.CanvasTexture(screenCanvas);
+                    screenMaterial.map = screenTexture;
+                }
+            }
+            
+            // Add a small lever or knob
+            const leverBaseGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.2, 16);
+            const leverBaseMaterial = new THREE.MeshStandardMaterial({
+                color: 0x777777,
+                roughness: 0.5,
+                metalness: 0.8
+            });
+            
+            const leverBase = new THREE.Mesh(leverBaseGeometry, leverBaseMaterial);
+            leverBase.position.set(x, y - 0.9, z + 0.3);
+            leverBase.rotation.x = Math.PI / 2;
+            
+            // Apply panel rotation
+            if (rotation !== 0) {
+                leverBase.position.set(x, y - 0.9, z);
+                leverBase.position.z += 0.3 * Math.cos(rotation);
+                leverBase.position.x -= 0.3 * Math.sin(rotation);
+                leverBase.rotation.y = rotation;
+            }
+            
+            leverBase.castShadow = true;
+            scene.add(leverBase);
+            objects.push(leverBase);
+            
+            // Lever stick
+            const leverStickGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
+            const leverStickMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            
+            const leverStick = new THREE.Mesh(leverStickGeometry, leverStickMaterial);
+            leverStick.position.set(x, y - 0.9, z + 0.6);
+            leverStick.rotation.x = Math.PI / 4;
+            
+            // Apply panel rotation
+            if (rotation !== 0) {
+                leverStick.position.set(x, y - 0.9, z);
+                leverStick.position.z += 0.6 * Math.cos(rotation);
+                leverStick.position.x -= 0.6 * Math.sin(rotation);
+                leverStick.rotation.y = rotation;
+                leverStick.rotation.x = Math.PI / 4;
+            }
+            
+            leverStick.castShadow = true;
+            scene.add(leverStick);
+            objects.push(leverStick);
+            
+            // Lever handle
+            const leverHandleGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+            const leverHandleMaterial = new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                roughness: 0.5,
+                metalness: 0.5
+            });
+            
+            const leverHandle = new THREE.Mesh(leverHandleGeometry, leverHandleMaterial);
+            leverHandle.position.set(x, y - 0.9, z + 0.9);
+            
+            // Apply panel rotation
+            if (rotation !== 0) {
+                leverHandle.position.set(x, y - 0.9, z);
+                leverHandle.position.z += 0.9 * Math.cos(rotation);
+                leverHandle.position.x -= 0.9 * Math.sin(rotation);
+            }
+            
+            leverHandle.castShadow = true;
+            scene.add(leverHandle);
+            objects.push(leverHandle);
+        }
+        
+        function addEnvironmentDetails() {
+            // Add trees around the dam
+            for (let i = 0; i < 50; i++) {
+                // Random position, but not too close to the dam
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * 180;
+                    z = (Math.random() - 0.5) * 180;
+                } while (Math.abs(z + 50) < 30 && Math.abs(x) < 50); // Avoid placing trees on the dam
+                
+                createTree(x, 0, z);
+            }
+            
+            // Add rocks
+            for (let i = 0; i < 30; i++) {
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * 180;
+                    z = (Math.random() - 0.5) * 180;
+                } while (Math.abs(z + 50) < 30 && Math.abs(x) < 50); // Avoid placing rocks on the dam
+                
+                createRock(x, 0, z);
+            }
+            
+            // Add some crates and barrels near the dam building
+            for (let i = 0; i < 10; i++) {
+                const x = 30 + (Math.random() - 0.5) * 15;
+                const z = -30 + (Math.random() - 0.5) * 15;
+                
+                if (Math.random() > 0.5) {
+                    createCrate(x, 0.5, z);
+                } else {
+                    createBarrel(x, 0.5, z);
+                }
+            }
+        }
+        
+        function createTree(x, y, z) {
+            // Create tree trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({
+                color: 0x8B4513, // Brown color
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.set(x, y + 2.5, z);
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            scene.add(trunk);
+            objects.push(trunk);
+            
+            // Create tree top (cone)
+            const treeTopGeometry = new THREE.ConeGeometry(3, 7, 8);
+            const treeTopMaterial = new THREE.MeshStandardMaterial({
+                color: 0x2E8B57, // Dark green
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const treeTop = new THREE.Mesh(treeTopGeometry, treeTopMaterial);
+            treeTop.position.set(x, y + 7.5, z);
+            treeTop.castShadow = true;
+            treeTop.receiveShadow = true;
+            scene.add(treeTop);
+            objects.push(treeTop);
+            
+            // Add a second, smaller cone for more detail
+            const treeTop2 = new THREE.Mesh(
+                new THREE.ConeGeometry(2, 4, 8),
+                treeTopMaterial
+            );
+            treeTop2.position.set(x, y + 11, z);
+            treeTop2.castShadow = true;
+            treeTop2.receiveShadow = true;
+            scene.add(treeTop2);
+            objects.push(treeTop2);
+            
+            // Add collision for the tree trunk
+            const trunkShape = new CANNON.Cylinder(0.5, 0.7, 5, 8);
+            const trunkBody = new CANNON.Body({ mass: 0 });
+            trunkBody.addShape(trunkShape);
+            trunkBody.position.set(x, y + 2.5, z);
+            world.addBody(trunkBody);
+        }
+        
+        function createRock(x, y, z) {
+            // Create a random shaped rock using an icosahedron
+            const rockGeometry = new THREE.IcosahedronGeometry(1 + Math.random() * 2, 0);
+            
+            // Randomize the vertices a bit to make each rock unique
+            const vertices = rockGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i++) {
+                vertices[i] += (Math.random() - 0.5) * 0.4;
+            }
+            
+            // Update normals after changing vertices
+            rockGeometry.computeVertexNormals();
+            
+            const rockMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(x, y + rockGeometry.parameters.radius / 2, z);
+            rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            scene.add(rock);
+            objects.push(rock);
+            
+            // Add collision for the rock (using a sphere for simplicity)
+            const rockShape = new CANNON.Sphere(rockGeometry.parameters.radius);
+            const rockBody = new CANNON.Body({ mass: 0 });
+            rockBody.addShape(rockShape);
+            rockBody.position.set(x, y + rockGeometry.parameters.radius / 2, z);
+            world.addBody(rockBody);
+        }
+        
+        function createCrate(x, y, z) {
+            // Create a crate
+            const size = 1 + Math.random() * 0.5;
+            const crateGeometry = new THREE.BoxGeometry(size, size, size);
+            const crateMaterial = new THREE.MeshStandardMaterial({
+                color: 0xA0522D, // Brown
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            // Add texture to the crate
+            const textureSize = 128;
+            const crateCanvas = document.createElement('canvas');
+            crateCanvas.width = textureSize;
+            crateCanvas.height = textureSize;
+            const ctx = crateCanvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add wood grain
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < textureSize; i += 8) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                
+                // Create a wavy line for wood grain
+                for (let x = 0; x < textureSize; x += 10) {
+                    const yOffset = Math.sin(x * 0.05) * 3;
+                    ctx.lineTo(x, i + yOffset);
+                }
+                
+                ctx.lineTo(textureSize, i);
+                ctx.stroke();
+            }
+            
+            // Add frame lines
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(0, 0, textureSize, textureSize);
+            ctx.strokeRect(10, 10, textureSize - 20, textureSize - 20);
+            
+            const crateTexture = new THREE.CanvasTexture(crateCanvas);
+            crateMaterial.map = crateTexture;
+            
+            const crate = new THREE.Mesh(crateGeometry, crateMaterial);
+            crate.position.set(x, y + size / 2, z);
+            crate.rotation.y = Math.random() * Math.PI;
+            crate.castShadow = true;
+            crate.receiveShadow = true;
+            scene.add(crate);
+            objects.push(crate);
+            
+            // Add collision for the crate
+            const crateShape = new CANNON.Box(new CANNON.Vec3(size / 2, size / 2, size / 2));
+            const crateBody = new CANNON.Body({ mass: 0 });
+            crateBody.addShape(crateShape);
+            crateBody.position.set(x, y + size / 2, z);
+            crateBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), crate.rotation.y);
+            world.addBody(crateBody);
+        }
+        
+        function createBarrel(x, y, z) {
+            // Create a barrel
+            const radius = 0.5 + Math.random() * 0.3;
+            const height = 1.5 + Math.random() * 0.5;
+            const barrelGeometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+            const barrelMaterial = new THREE.MeshStandardMaterial({
+                color: 0x777777, // Metal color
+                roughness: 0.5,
+                metalness: 0.7
+            });
+            
+            const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+            barrel.position.set(x, y + height / 2, z);
+            barrel.castShadow = true;
+            barrel.receiveShadow = true;
+            scene.add(barrel);
+            objects.push(barrel);
+            
+            // Add some details to the barrel
+            // Rim at the top
+            const topRimGeometry = new THREE.TorusGeometry(radius, 0.1, 8, 16);
+            const rimMaterial = new THREE.MeshStandardMaterial({
+                color: 0x555555,
+                roughness: 0.7,
+                metalness: 0.5
+            });
+            
+            const topRim = new THREE.Mesh(topRimGeometry, rimMaterial);
+            topRim.position.set(x, y + height / 2, z);
+            topRim.rotation.x = Math.PI / 2;
+            topRim.castShadow = true;
+            scene.add(topRim);
+            objects.push(topRim);
+            
+            // Rim at the bottom
+            const bottomRim = new THREE.Mesh(topRimGeometry, rimMaterial);
+            bottomRim.position.set(x, y - height / 2, z);
+            bottomRim.rotation.x = Math.PI / 2;
+            bottomRim.castShadow = true;
+            scene.add(bottomRim);
+            objects.push(bottomRim);
+            
+            // Add a hazard symbol to the barrel
+            const decalGeometry = new THREE.PlaneGeometry(radius * 1.5, radius * 1.5);
+            const decalMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                transparent: true
+            });
+            
+            // Create hazard symbol texture
+            const decalCanvas = document.createElement('canvas');
+            decalCanvas.width = 128;
+            decalCanvas.height = 128;
+            const ctx = decalCanvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#ffff00';
+            ctx.fillRect(0, 0, 128, 128);
+            
+            // Hazard symbol
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.moveTo(64, 10);
+            ctx.lineTo(118, 96);
+            ctx.lineTo(10, 96);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Exclamation mark
+            ctx.fillStyle = '#ffff00';
+            ctx.fillRect(59, 30, 10, 40);
+            ctx.fillRect(59, 75, 10, 10);
+            
+            const decalTexture = new THREE.CanvasTexture(decalCanvas);
+            decalMaterial.map = decalTexture;
+            
+            const decal = new THREE.Mesh(decalGeometry, decalMaterial);
+            decal.position.set(x, y, z + radius + 0.01);
+            decal.rotation.y = Math.PI;
+            scene.add(decal);
+            
+            // Add collision for the barrel
+            const barrelShape = new CANNON.Cylinder(radius, radius, height, 8);
+            const barrelBody = new CANNON.Body({ mass: 0 });
+            barrelBody.addShape(barrelShape);
+            barrelBody.position.set(x, y + height / 2, z);
+            world.addBody(barrelBody);
+        }
+        
+        function createWater() {
+            // Create a large water plane
+            const waterGeometry = new THREE.PlaneGeometry(2000, 2000, 50, 50);
+            
+            // Create animated water texture
+            const textureSize = 512;
+            const waterCanvas = document.createElement('canvas');
+            waterCanvas.width = textureSize;
+            waterCanvas.height = textureSize;
+            const ctx = waterCanvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#0077be';
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            // Add some lighter blue areas for waves
+            ctx.fillStyle = '#0099cc';
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = 10 + Math.random() * 30;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Add some highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            for (let i = 0; i < 100; i++) {
+                const x = Math.random() * textureSize;
+                const y = Math.random() * textureSize;
+                const size = 2 + Math.random() * 5;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const waterTexture = new THREE.CanvasTexture(waterCanvas);
+            waterTexture.wrapS = THREE.RepeatWrapping;
+            waterTexture.wrapT = THREE.RepeatWrapping;
+            waterTexture.repeat.set(20, 20);
+            
+            // Create water material with transparency and reflection
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077be,
+                roughness: 0.1,
+                metalness: 0.8,
+                transparent: true,
+                opacity: 0.8,
+                map: waterTexture
+            });
+            
+            water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = -2;
+            water.position.z = -100; // Position the water on the other side of the dam
+            water.receiveShadow = true;
+            scene.add(water);
+            
+            // Create water splash particles near the dam base
+            createWaterSplash(0, -1.5, -52);
+        }
+        
+        function createWaterSplash(x, y, z) {
+            // Create particles for water splash
+            const particleCount = 100;
+            const particles = new THREE.BufferGeometry();
+            
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+            
+            const color = new THREE.Color();
+            
+            for (let i = 0; i < particleCount; i++) {
+                // Position particles in a small area at the base of the dam
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+                
+                positions[ix] = x + (Math.random() - 0.5) * 20;
+                positions[iy] = y + Math.random() * 3;
+                positions[iz] = z + (Math.random() - 0.5) * 3;
+                
+                // Mix of blue and white colors
+                if (Math.random() > 0.7) {
+                    color.setRGB(1, 1, 1); // White
+                } else {
+                    color.setRGB(0, 0.6, 0.9); // Blue
+                }
+                
+                colors[ix] = color.r;
+                colors[iy] = color.g;
+                colors[iz] = color.b;
+                
+                sizes[i] = 0.5 + Math.random() * 1.5;
+            }
+            
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            // Particle material
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 1,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true
+            });
+            
+            // Create the particle system
+            const particleSystem = new THREE.Points(particles, particleMaterial);
+            scene.add(particleSystem);
+            
+            // Store original positions for animation
+            particleSystem.userData = {
+                originalPositions: positions.slice(),
+                velocities: Array(particleCount).fill().map(() => ({  
+                    x: (Math.random() - 0.5) * 0.1,
+                    y: Math.random() * 0.2,
+                    z: (Math.random() - 0.5) * 0.1
+                }))
+            };
+            
+            return particleSystem;
+        }
+        
+        function updateWaterSplash(particleSystem, delta) {
+            const positions = particleSystem.geometry.attributes.position.array;
+            const originalPositions = particleSystem.userData.originalPositions;
+            const velocities = particleSystem.userData.velocities;
+            
+            for (let i = 0; i < positions.length / 3; i++) {
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+                
+                // Apply gravity and update position
+                positions[ix] += velocities[i].x;
+                positions[iy] += velocities[i].y;
+                positions[iz] += velocities[i].z;
+                
+                // Apply gravity
+                velocities[i].y -= 0.01;
+                
+                // Reset particles that fall too low
+                if (positions[iy] < -2) {
+                    positions[ix] = originalPositions[ix] + (Math.random() - 0.5) * 2;
+                    positions[iy] = originalPositions[iy];
+                    positions[iz] = originalPositions[iz] + (Math.random() - 0.5) * 2;
+                    
+                    velocities[i] = {
+                        x: (Math.random() - 0.5) * 0.1,
+                        y: Math.random() * 0.2,
+                        z: (Math.random() - 0.5) * 0.1
+                    };
+                }
+            }
+            
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        function createEnemies() {
+            // Create ninja enemies at strategic positions around the dam
+            const enemyPositions = [
+                { x: -40, y: 0, z: -30 },
+                { x: 40, y: 0, z: -30 },
+                { x: 0, y: 30, z: -48 }, // Top of the dam
+                { x: 30, y: 5, z: -45 }, // Near the building
+                { x: -20, y: 20, z: -40 }, // On a walkway
+                { x: 20, y: 20, z: -40 }, // On a walkway
+                { x: -10, y: 10, z: -45 }, // On another walkway
+                { x: 10, y: 10, z: -45 }, // On another walkway
+                { x: 35, y: 0, z: -20 }, // Near the building entrance
+                { x: 25, y: 0, z: -20 } // Near the building entrance
+            ];
+            
+            enemyPositions.forEach(pos => {
+                createEnemy(pos.x, pos.y, pos.z);
+            });
+        }
+        
+        function createEnemy(x, y, z) {
+            // Create a ninja enemy
+            const enemyGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1.8, 8);
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: 0x000000, // Black for ninja
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.9;
+            enemyGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({
+                color: 0x000000, // Black for ninja
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 2.0;
+            enemyGroup.add(head);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({
+                color: 0xff0000, // Red eyes
+                emissive: 0xff0000,
+                emissiveIntensity: 0.5
+            });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(-0.15, 2.0, 0.3);
+            enemyGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(0.15, 2.0, 0.3);
+            enemyGroup.add(rightEye);
+            
+            // Arms
+            const armGeometry = new THREE.CylinderGeometry(0.15, 0.15, 1.0, 8);
+            const armMaterial = new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+            leftArm.position.set(-0.7, 1.0, 0);
+            leftArm.rotation.z = Math.PI / 4;
+            enemyGroup.add(leftArm);
+            
+            const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+            rightArm.position.set(0.7, 1.0, 0);
+            rightArm.rotation.z = -Math.PI / 4;
+            enemyGroup.add(rightArm);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.0, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            leftLeg.position.set(-0.3, 0.0, 0);
+            enemyGroup.add(leftLeg);
+            
+            const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            rightLeg.position.set(0.3, 0.0, 0);
+            enemyGroup.add(rightLeg);
+            
+            // Add a ninja sword
+            const swordHandleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8);
+            const swordHandle = new THREE.Mesh(swordHandleGeometry, new THREE.MeshStandardMaterial({ color: 0x8B4513 }));
+            swordHandle.position.set(0.7, 1.0, 0.6);
+            swordHandle.rotation.x = Math.PI / 2;
+            enemyGroup.add(swordHandle);
+            
+            const swordBladeGeometry = new THREE.BoxGeometry(0.05, 0.8, 0.01);
+            const swordBlade = new THREE.Mesh(swordBladeGeometry, new THREE.MeshStandardMaterial({ 
+                color: 0xcccccc,
+                metalness: 0.9,
+                roughness: 0.1
+            }));
+            swordBlade.position.set(0.7, 1.0, 1.0);
+            swordBlade.rotation.x = Math.PI / 2;
+            enemyGroup.add(swordBlade);
+            
+            // Position the enemy
+            enemyGroup.position.set(x, y, z);
+            scene.add(enemyGroup);
+            objects.push(enemyGroup);
+            
+            // Add physics body for collision detection
+            const enemyShape = new CANNON.Cylinder(0.5, 0.5, 1.8, 8);
+            const enemyBody = new CANNON.Body({ mass: 0 }); // Static body
+            enemyBody.addShape(enemyShape);
+            enemyBody.position.set(x, y + 0.9, z);
+            world.addBody(enemyBody);
+            
+            // Store enemy data
+            const enemy = {
+                mesh: enemyGroup,
+                body: enemyBody,
+                health: 100,
+                isDead: false,
+                lastShot: 0,
+                patrolPoint1: new THREE.Vector3(x, y, z),
+                patrolPoint2: new THREE.Vector3(x + (Math.random() - 0.5) * 10, y, z + (Math.random() - 0.5) * 10),
+                targetPoint: new THREE.Vector3(x, y, z),
+                moveSpeed: 0.02 + Math.random() * 0.02,
+                state: 'patrol', // patrol, chase, attack
+                timeToNextState: Math.random() * 3 + 1,
+                update: function(delta, playerPosition) {
+                    if (this.isDead) return;
+                    
+                    // Update state timer
+                    this.timeToNextState -= delta;
+                    
+                    // Check distance to player
+                    const distToPlayer = this.mesh.position.distanceTo(playerPosition);
+                    
+                    // State machine
+                    if (distToPlayer < 15) {
+                        this.state = 'chase';
+                    } else if (distToPlayer < 30 && Math.random() < 0.005) {
+                        this.state = 'chase';
+                    } else if (this.timeToNextState <= 0) {
+                        // Switch between patrol points
+                        this.state = 'patrol';
+                        this.timeToNextState = Math.random() * 3 + 1;
+                        
+                        if (this.targetPoint.equals(this.patrolPoint1)) {
+                            this.targetPoint.copy(this.patrolPoint2);
+                        } else {
+                            this.targetPoint.copy(this.patrolPoint1);
+                        }
+                    }
+                    
+                    // Handle different states
+                    if (this.state === 'chase') {
+                        // Chase player
+                        this.targetPoint.copy(playerPosition);
+                        
+                        // Shoot at player occasionally
+                        if (distToPlayer < 20 && Date.now() - this.lastShot > 2000) {
+                            this.shootAtPlayer(playerPosition);
+                            this.lastShot = Date.now();
+                        }
+                    }
+                    
+                    // Move towards target
+                    const direction = new THREE.Vector3().subVectors(this.targetPoint, this.mesh.position);
+                    
+                    if (direction.length() > 0.5) {
+                        direction.normalize();
+                        
+                        // Move enemy
+                        this.mesh.position.x += direction.x * this.moveSpeed;
+                        this.mesh.position.z += direction.z * this.moveSpeed;
+                        
+                        // Update physics body
+                        this.body.position.x = this.mesh.position.x;
+                        this.body.position.z = this.mesh.position.z;
+                        
+                        // Rotate enemy to face movement direction
+                        this.mesh.lookAt(new THREE.Vector3(
+                            this.mesh.position.x + direction.x,
+                            this.mesh.position.y,
+                            this.mesh.position.z + direction.z
+                        ));
+                    }
+                },
+                takeDamage: function(damage) {
+                    this.health -= damage;
+                    
+                    if (this.health <= 0 && !this.isDead) {
+                        this.die();
+                        return true;
+                    }
+                    
+                    // Enter chase state when hit
+                    this.state = 'chase';
+                    return false;
+                },
+                die: function() {
+                    this.isDead = true;
+                    
+                    // Ragdoll effect - rotate the body
+                    this.mesh.rotation.x = Math.PI / 2;
+                    
+                    // Remove physics body
+                    world.removeBody(this.body);
+                    
+                    // Remove from scene after delay
+                    setTimeout(() => {
+                        scene.remove(this.mesh);
+                        const index = enemies.indexOf(this);
+                        if (index !== -1) {
+                            enemies.splice(index, 1);
+                        }
+                    }, 5000);
+                },
+                shootAtPlayer: function(playerPosition) {
+                    // Create a bullet from this enemy
+                    const bulletDirection = new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize();
+                    
+                    // Add some inaccuracy
+                    bulletDirection.x += (Math.random() - 0.5) * 0.2;
+                    bulletDirection.y += (Math.random() - 0.5) * 0.2;
+                    bulletDirection.z += (Math.random() - 0.5) * 0.2;
+                    bulletDirection.normalize();
+                    
+                    // Create the bullet
+                    const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                    const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+                    
+                    // Position bullet at enemy with slight offset
+                    bullet.position.copy(this.mesh.position);
+                    bullet.position.y += 1.5;
+                    bullet.position.x += bulletDirection.x * 0.5;
+                    bullet.position.z += bulletDirection.z * 0.5;
+                    
+                    scene.add(bullet);
+                    
+                    // Store bullet data
+                    enemyBullets.push({
+                        mesh: bullet,
+                        direction: bulletDirection,
+                        speed: 0.5,
+                        damage: 10,
+                        timeToLive: 5
+                    });
+                }
+            };
+            
+            enemies.push(enemy);
+            return enemy;
+        }
+        
+        function updateEnemies(delta) {
+            enemies.forEach(enemy => {
+                enemy.update(delta, camera.position);
+            });
+        }
+        
+        function updateEnemyBullets(delta) {
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                
+                // Update position
+                bullet.mesh.position.x += bullet.direction.x * bullet.speed;
+                bullet.mesh.position.y += bullet.direction.y * bullet.speed;
+                bullet.mesh.position.z += bullet.direction.z * bullet.speed;
+                
+                // Update time to live
+                bullet.timeToLive -= delta;
+                
+                // Check for collision with player
+                const distToPlayer = bullet.mesh.position.distanceTo(camera.position);
+                if (distToPlayer < 1) {
+                    // Player hit
+                    takeDamage(bullet.damage);
+                    
+                    // Remove bullet
+                    scene.remove(bullet.mesh);
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check if bullet has expired
+                if (bullet.timeToLive <= 0) {
+                    scene.remove(bullet.mesh);
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collision with environment
+                const bulletRay = new THREE.Raycaster(
+                    new THREE.Vector3().copy(bullet.mesh.position).sub(bullet.direction.clone().multiplyScalar(0.5)),
+                    bullet.direction,
+                    0,
+                    0.5
+                );
+                
+                const intersects = bulletRay.intersectObjects(objects);
+                if (intersects.length > 0) {
+                    scene.remove(bullet.mesh);
+                    enemyBullets.splice(i, 1);
+                }
+            }
+        }
+        
+        // Function to start a solo game (no multiplayer)
+        function startSoloGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            document.body.requestPointerLock();
+            gameActive = true;
+            
+            // Start the timer
+            timer = setInterval(updateTimer, 1000);
+        }
+        
+        // Function to start or join multiplayer room
+        window.startRoom = function(roomCode, name) {
+            console.log("Starting room with code:", roomCode, "and player name:", name);
+            
+            // Update the player name
+            playerName = name;
+            
+            // Set the room ID
+            roomIdFromUrl = roomCode;
+            
+            // Initialize the multiplayer
+            initializeMultiplayer();
+            
+            // Start the game after a short delay if connection takes too long
+            setTimeout(() => {
+                if (document.getElementById('startScreen').style.display !== 'none') {
+                    console.log("Room join timed out, starting game anyway");
+                    document.getElementById('startScreen').style.display = 'none';
+                    document.body.requestPointerLock();
+                    gameActive = true;
+                    
+                    // Start the timer
+                    timer = setInterval(updateTimer, 1000);
+                }
+            }, 3000);
+        };
+        
+        // Initialize the multiplayer system
+        function initializeMultiplayer() {
+            console.log("Initializing multiplayer with roomId:", roomIdFromUrl);
+            
+            try {
+                // Setup multiplayer with game-specific adapter functions
+                multiplayer = new UniversalMultiplayer({
+                    gameId: 'goldenshadow-dam-infiltration',
+                    roomId: roomIdFromUrl,
+                    serverUrl: window.location.origin,
+                    updateRate: 50, // Update 20 times per second
+                    
+                    // Convert local player state to network format
+                    stateAdapter: function() {
+                        // Return current player state
+                        return {
+                            position: {
+                                x: camera.position.x,
+                                y: camera.position.y,
+                                z: camera.position.z
+                            },
+                            rotation: {
+                                yaw: cameraYaw,
+                                pitch: cameraPitch
+                            },
+                            health: health,
+                            score: score,
+                            name: playerName,
+                            shooting: false,
+                            isReloading: isReloading
+                        };
+                    },
+                    
+                    // Handle received state from other players
+                    renderAdapter: function(playerId, state) {
+                        // Create a new remote player if needed
+                        if (!remotePlayers[playerId]) {
+                            remotePlayers[playerId] = {
+                                id: playerId,
+                                position: state.position || { x: 0, y: 0, z: 0 },
+                                rotation: state.rotation || { yaw: 0, pitch: 0 },
+                                health: state.health || 100,
+                                score: state.score || 0,
+                                name: state.name || "Unknown Agent",
+                                shooting: false,
+                                isReloading: false,
+                                lastUpdate: Date.now()
+                            };
+                            
+                            // Create 3D representation of remote player
+                            createRemotePlayerMesh(playerId, state);
+                        } else {
+                            // Update existing remote player data
+                            remotePlayers[playerId].position = state.position || remotePlayers[playerId].position;
+                            remotePlayers[playerId].rotation = state.rotation || remotePlayers[playerId].rotation;
+                            remotePlayers[playerId].health = state.health || remotePlayers[playerId].health;
+                            remotePlayers[playerId].score = state.score || remotePlayers[playerId].score;
+                            remotePlayers[playerId].name = state.name || remotePlayers[playerId].name;
+                            remotePlayers[playerId].shooting = state.shooting || false;
+                            remotePlayers[playerId].isReloading = state.isReloading || false;
+                            remotePlayers[playerId].lastUpdate = Date.now();
+                            
+                            // Update 3D representation
+                            updateRemotePlayerMesh(playerId);
+                        }
+                    }
+                });
+
+                // Connect to server
+                multiplayer.connect({
+                    name: playerName
+                });
+                
+                // Set up event handlers
+                setupMultiplayerEvents();
+                
+            } catch (error) {
+                console.error("Error initializing multiplayer:", error);
+            }
+        }
+        
+        // Setup multiplayer event handlers
+        function setupMultiplayerEvents() {
+            // Handle connection events
+            multiplayer.on('connected', () => {
+                console.log('Connected to multiplayer server');
+            });
+            
+            multiplayer.on('roomJoined', (data) => {
+                console.log('Joined room:', data.roomId);
+                // Save the shareable URL
+                shareableUrl = multiplayer.getShareableUrl();
+                updateMultiplayerInfo();
+                
+                // Start the game now that we've joined a room
+                document.getElementById('startScreen').style.display = 'none';
+                document.body.requestPointerLock();
+                gameActive = true;
+                
+                // Start the timer
+                timer = setInterval(updateTimer, 1000);
+            });
+            
+            multiplayer.on('playerJoined', (data) => {
+                console.log('Player joined:', data.id);
+                updateMultiplayerInfo();
+            });
+            
+            multiplayer.on('playerLeft', (data) => {
+                console.log('Player left:', data.id);
+                removeRemotePlayer(data.id);
+                updateMultiplayerInfo();
+            });
+            
+            // Listen for custom game events
+            multiplayer.on('playerShot', (data) => {
+                if (data.id !== multiplayer.playerId) {
+                    // Show remote player shooting
+                    const remotePlayer = remotePlayers[data.id];
+                    if (remotePlayer) {
+                        const shootPosition = data.eventData.position;
+                        const shootDirection = data.eventData.direction;
+                        createRemotePlayerBullet(shootPosition, shootDirection);
+                    }
+                }
+            });
+        }
+        
+        // Update multiplayer info display
+        function updateMultiplayerInfo() {
+            if (!multiplayer || !document.getElementById('mpInfo')) return;
+            
+            const roomInfo = multiplayer.getRoomInfo();
+            const playerCount = roomInfo.playerCount;
+            const roomId = roomInfo.roomId || "Unknown";
+            
+            // Show the info panel
+            document.getElementById('mpInfo').style.display = 'block';
+            
+            // Update the multiplayer info panel
+            document.getElementById('mpInfo').innerHTML = `
+                <div style="margin-bottom: 5px;">ROOM CODE: <span style="font-weight: bold;">${roomId}</span></div>
+                <div>AGENTS: ${playerCount}</div>
+                <div style="font-size: 10px; margin-top: 8px;">
+                    <span style="cursor: pointer; text-decoration: underline;" 
+                        onclick="navigator.clipboard.writeText('${roomId}').then(() => { alert('Room code copied!'); })">
+                        Copy room code
+                    </span>
+                    <span style="cursor: pointer; text-decoration: underline; margin-left: 10px;" 
+                        onclick="navigator.clipboard.writeText('${shareableUrl}').then(() => { alert('Shareable URL copied!'); })">
+                        Copy URL
+                    </span>
+                </div>
+            `;
+        }
+        
+        // Create 3D representation of remote player
+        function createRemotePlayerMesh(playerId, state) {
+            // Create a player group
+            const playerGroup = new THREE.Group();
+            
+            // Create body - using a cylinder for the player body
+            const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1.8, 8);
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077FF, // Blue for allies
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.9;
+            playerGroup.add(body);
+            
+            // Create head
+            const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077FF,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 2.0;
+            playerGroup.add(head);
+            
+            // Create gun model
+            const gunGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.5);
+            const gunMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.5,
+                metalness: 0.7
+            });
+            
+            const gun = new THREE.Mesh(gunGeometry, gunMaterial);
+            gun.position.set(0.3, 1.5, 0.3);
+            playerGroup.add(gun);
+            
+            // Create name text
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 256, 64);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(state.name || "Unknown Agent", 128, 32);
+            
+            const nameTexture = new THREE.CanvasTexture(canvas);
+            const nameMaterial = new THREE.SpriteMaterial({ map: nameTexture });
+            const nameSprite = new THREE.Sprite(nameMaterial);
+            nameSprite.position.set(0, 2.5, 0);
+            nameSprite.scale.set(2, 0.5, 1);
+            playerGroup.add(nameSprite);
+            
+            // Set position from state
+            if (state.position) {
+                playerGroup.position.set(
+                    state.position.x,
+                    state.position.y,
+                    state.position.z
+                );
+            }
+            
+            scene.add(playerGroup);
+            remotePlayerMeshes[playerId] = {
+                group: playerGroup,
+                body: body,
+                head: head,
+                gun: gun,
+                nameSprite: nameSprite
+            };
+        }
+        
+        // Update remote player mesh position and rotation
+        function updateRemotePlayerMesh(playerId) {
+            const remotePlayer = remotePlayers[playerId];
+            const mesh = remotePlayerMeshes[playerId];
+            
+            if (!remotePlayer || !mesh) return;
+            
+            // Update position
+            mesh.group.position.set(
+                remotePlayer.position.x,
+                remotePlayer.position.y - 1.0, // Adjust to make feet touch ground
+                remotePlayer.position.z
+            );
+            
+            // Update rotation - make player face direction of movement
+            const yaw = remotePlayer.rotation.yaw || 0;
+            mesh.group.rotation.y = yaw;
+            
+            // Update gun rotation based on pitch
+            const pitch = remotePlayer.rotation.pitch || 0;
+            mesh.gun.rotation.x = pitch;
+            
+            // Animate gun when shooting
+            if (remotePlayer.shooting) {
+                mesh.gun.position.z = 0.1; // Recoil
+                setTimeout(() => {
+                    if (mesh && mesh.gun) {
+                        mesh.gun.position.z = 0.3; // Return to normal position
+                    }
+                }, 50);
+            }
+        }
+        
+        // Remove remote player when they disconnect
+        function removeRemotePlayer(playerId) {
+            const mesh = remotePlayerMeshes[playerId];
+            if (mesh) {
+                scene.remove(mesh.group);
+                delete remotePlayerMeshes[playerId];
+            }
+            delete remotePlayers[playerId];
+        }
+        
+        // Create bullet for remote player shooting
+        function createRemotePlayerBullet(position, direction) {
+            const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); // Blue for allies
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            bullet.position.set(position.x, position.y, position.z);
+            scene.add(bullet);
+            
+            const bulletDir = new THREE.Vector3(direction.x, direction.y, direction.z).normalize();
+            
+            // Add to bullets array with special flag
+            bullets.push({
+                mesh: bullet,
+                direction: bulletDir,
+                speed: 1,
+                damage: 0, // No damage to player from allies
+                timeToLive: 3,
+                isRemote: true
+            });
+        }
+        
+        // Modified shoot function to broadcast to other players
+        function shoot() {
+            if (isReloading || currentAmmo <= 0) {
+                // Can't shoot while reloading or out of ammo
+                if (currentAmmo <= 0) {
+                    reload();
+                }
+                return;
+            }
+            
+            // Decrease ammo
+            currentAmmo--;
+            updateUI();
+            
+            // Show muzzle flash
+            const muzzleFlash = document.getElementById('muzzleFlash');
+            muzzleFlash.style.display = 'block';
+            setTimeout(() => {
+                muzzleFlash.style.display = 'none';
+            }, 50);
+            
+            // Create bullet
+            const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            // Position bullet at camera position
+            bullet.position.copy(camera.position);
+            
+            // Get direction from camera
+            const bulletDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+            
+            scene.add(bullet);
+            
+            // Store bullet data
+            bullets.push({
+                mesh: bullet,
+                direction: bulletDirection,
+                speed: 1,
+                damage: 25,
+                timeToLive: 3
+            });
+            
+            // Add weapon recoil effect (but save camera state first)
+            const originalQuaternion = camera.quaternion.clone();
+            const originalRotation = camera.rotation.clone();
+            
+            applyWeaponRecoil();
+            
+            // Ensure camera quaternion doesn't get corrupted by weapon recoil
+            setTimeout(() => {
+                // Restore orientation state to prevent accumulation of errors
+                camera.quaternion.copy(originalQuaternion);
+                camera.rotation.copy(originalRotation);
+                
+                // Reapply the proper rotation based on yaw and pitch
+                const euler = new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ');
+                camera.quaternion.setFromEuler(euler);
+            }, 150);
+            
+            // Create shell casing effect
+            createShellCasing();
+            
+            // Send shooting event to other players if in multiplayer
+            if (multiplayer && multiplayer.connected) {
+                multiplayer.sendGameEvent('playerShot', {
+                    position: {
+                        x: camera.position.x,
+                        y: camera.position.y,
+                        z: camera.position.z
+                    },
+                    direction: {
+                        x: bulletDirection.x,
+                        y: bulletDirection.y,
+                        z: bulletDirection.z
+                    }
+                });
+            }
+        }
+        
+        // Modified reload function for multiplayer awareness
+        function reload() {
+            if (isReloading || currentAmmo === 30 || totalAmmo <= 0) return;
+            
+            isReloading = true;
+            
+            // Show reloading message
+            const reloadMessage = document.getElementById('reloadMessage');
+            reloadMessage.style.opacity = '1';
+            
+            // Reload animation for weapon model
+            const weaponModel = document.getElementById('weaponModel');
+            weaponModel.style.transform = 'translateY(50px) rotate(-20deg)';
+            
+            setTimeout(() => {
+                weaponModel.style.transform = 'translateY(20px) rotate(-10deg)';
+            }, 500);
+            
+            setTimeout(() => {
+                weaponModel.style.transform = 'translateY(10px) rotate(-5deg)';
+            }, 1000);
+            
+            setTimeout(() => {
+                weaponModel.style.transform = 'none';
+                
+                // Complete reload
+                const ammoNeeded = 30 - currentAmmo;
+                const ammoToAdd = Math.min(ammoNeeded, totalAmmo);
+                
+                currentAmmo += ammoToAdd;
+                totalAmmo -= ammoToAdd;
+                
+                isReloading = false;
+                updateUI();
+                
+                // Hide reloading message
+                reloadMessage.style.opacity = '0';
+            }, 2000); // 2 second reload time
+        }
+        
+        // Update remote players (clean up disconnected players)
+        function updateRemotePlayers() {
+            const now = Date.now();
+            for (const id in remotePlayers) {
+                // If player data hasn't been updated in 10 seconds, remove them
+                if (now - remotePlayers[id].lastUpdate > 10000) {
+                    removeRemotePlayer(id);
+                }
+            }
+        }
+        
+        // Cleanup player on leaving
+        window.addEventListener('beforeunload', function() {
+            if (multiplayer) {
+                multiplayer.disconnect();
+            }
+        });
+        
+        // Update debug information for multiplayer
+        function debugMultiplayer() {
+            console.log("===== MULTIPLAYER DEBUG =====");
+            console.log("Connected:", multiplayer ? multiplayer.connected : false);
+            console.log("Player ID:", multiplayer ? multiplayer.playerId : "unknown");
+            console.log("Room ID:", multiplayer ? multiplayer.roomId : "unknown");
+            console.log("Remote Players:", remotePlayers);
+        }
+        
+        // Add debug key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'm') {
+                debugMultiplayer();
+            }
+        });
+        
+        // Restart game function
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            document.body.requestPointerLock();
+            
+            // Reset game state
+            score = 0;
+            health = 100;
+            currentAmmo = 30;
+            totalAmmo = 90;
+            timeRemaining = 300;
+            isClimbing = false;
+            climbingLadder = null;
+            canJump = false; // Reset jump state
+            
+            // Reset player position
+            playerBody.position.set(0, playerHeight, 30);
+            playerBody.velocity.set(0, 0, 0);
+            
+            // Reset camera rotation and angles
+            cameraYaw = 0;
+            cameraPitch = 0;
+            camera.rotation.set(0, 0, 0);
+            
+            // Reset enemies
+            enemies.forEach(enemy => {
+                scene.remove(enemy.mesh);
+                world.removeBody(enemy.body);
+            });
+            enemies = [];
+            createEnemies();
+            
+            // Clear bullets
+            bullets.forEach(bullet => scene.remove(bullet.mesh));
+            bullets = [];
+            enemyBullets.forEach(bullet => scene.remove(bullet.mesh));
+            enemyBullets = [];
+            
+            // Update UI
+            updateUI();
+            
+            // Restart timer
+            clearInterval(timer);
+            timer = setInterval(updateTimer, 1000);
+            
+            gameActive = true;
+        }
+        
+        // Function to reset camera orientation when it gets inverted
+        function resetCameraOrientation() {
+            // Reset rotation state to the proper values based on yaw and pitch
+            cameraYaw = cameraYaw % (2 * Math.PI); // Normalize yaw to prevent very large values
+            cameraPitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cameraPitch));
+            
+            // Apply clean rotation
+            camera.rotation.set(0, 0, 0);
+            const euler = new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ');
+            camera.quaternion.setFromEuler(euler);
+        }
+        
+        // Modified animate function to update multiplayer state
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            
+            // Update physics
+            world.step(delta);
+            
+            if (gameActive) {
+                // Check for potential camera inversion issues and fix automatically
+                if (Math.abs(camera.rotation.z) > 0.1 || // Z rotation should normally be close to 0
+                    Math.abs(cameraPitch) > Math.PI / 2 - 0.01) { // Pitch approaching limits
+                    console.log("Detected potential camera inversion, resetting orientation");
+                    resetCameraOrientation();
+                }
+                
+                // Check for ladder interaction
+                checkLadderInteraction();
+                
+                // Handle climbing
+                if (isClimbing) {
+                    // Override physics for climbing
+                    playerBody.velocity.set(0, 0, 0);
+                    playerBody.position.x = climbingLadder.position.x;
+                    playerBody.position.z = climbingLadder.position.z + 0.5; // Offset slightly in front of ladder
+                    
+                    // Move up or down the ladder
+                    if (moveForward) {
+                        playerBody.position.y += climbingSpeed * delta;
+                    } else if (moveBackward) {
+                        playerBody.position.y -= climbingSpeed * delta;
+                    }
+                } else {
+                    // Normal movement
+                    direction.z = Number(moveForward) - Number(moveBackward);
+                    direction.x = Number(moveRight) - Number(moveLeft);
+                    direction.normalize(); // This ensures consistent movement in all directions
+                    
+                    if (direction.length() !== 0) {
+                        // Get forward and right vectors from camera
+                        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                        forward.y = 0;
+                        forward.normalize();
+                        
+                        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                        right.y = 0;
+                        right.normalize();
+                        
+                        // Calculate movement vector
+                        const moveVector = new THREE.Vector3();
+                        moveVector.addScaledVector(forward, direction.z);
+                        moveVector.addScaledVector(right, direction.x);
+                        moveVector.normalize();
+                        
+                        // Apply movement to physics body
+                        const currentSpeed = isRunning ? runSpeed : playerSpeed;
+                        playerBody.velocity.x = moveVector.x * currentSpeed;
+                        playerBody.velocity.z = moveVector.z * currentSpeed;
+                    }
+                }
+                
+                // Update camera position from physics
+                camera.position.x = playerBody.position.x;
+                camera.position.y = playerBody.position.y;
+                camera.position.z = playerBody.position.z;
+                
+                // Improved ground detection
+                const rayStartPos = new CANNON.Vec3(
+                    playerBody.position.x,
+                    playerBody.position.y - 0.1, // Start slightly below player's center
+                    playerBody.position.z
+                );
+                const rayTo = new CANNON.Vec3(0, -1, 0);
+                const ray = new CANNON.Ray(rayStartPos, rayTo);
+                const result = new CANNON.RaycastResult();
+                const rayHitDistance = 1.0; // Slightly less than player height
+                
+                ray.intersectWorld(world, { result });
+                
+                // Check if player is on or very close to the ground
+                if (result.hasHit && result.distance < rayHitDistance) {
+                    canJump = true;
+                    if (debug) {
+                        console.log("Ground detected, jump enabled");
+                    }
+                } else if (Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.9) {
+                    // Backup check - if player is not moving vertically and close to ground level
+                    canJump = true;
+                    if (debug) {
+                        console.log("Ground level detected by height");
+                    }
+                }
+                
+                // Update weapon bob based on movement
+                const isMoving = (moveForward || moveBackward || moveLeft || moveRight) && canJump;
+                updateWeaponBob(delta, isMoving);
+                
+                // Update bullets
+                updateBullets(delta);
+                
+                // Update enemies
+                updateEnemies(delta);
+                
+                // Update enemy bullets
+                updateEnemyBullets(delta);
+                
+                // Update water effects
+                if (water) {
+                    // Animate water texture
+                    water.material.map.offset.x += 0.0005;
+                    water.material.map.offset.y += 0.0003;
+                }
+                
+                // Update particle emitters
+                particleEmitters.forEach(emitter => emitter.update(delta));
+                
+                // Check if player fell into the water
+                if (camera.position.y < -1.5 && camera.position.z < -52) {
+                    takeDamage(100); // Instant death
+                }
+                
+                // Update debug info
+                updateDebugInfo();
+                
+                // Store current position for next frame
+                previousPosition.copy(camera.position);
+                
+                // Update multiplayer if connected
+                if (multiplayer && multiplayer.connected) {
+                    updateRemotePlayers();
+                }
+            }
+            
+            // Update skybox position to follow camera
+            if (skybox) {
+                skybox.position.copy(camera.position);
+            }
+            
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+        
+        function updateTimer() {
+            if (!gameActive) return;
+            
+            timeRemaining--;
+            
+            if (timeRemaining <= 0) {
+                // Time's up - mission failed
+                endGame(false);
+            }
+            
+            // Update timer display
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            document.getElementById('timer').textContent = `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        function endGame(success) {
+            gameActive = false;
+            document.exitPointerLock();
+            clearInterval(timer);
+            
+            document.getElementById('gameOver').style.display = 'flex';
+            document.getElementById('gameOverText').textContent = success ? 'Mission Complete!' : 'Mission Failed!';
+            document.getElementById('finalScore').textContent = `Score: ${score}`;
+        }
+        
+        function onKeyDown(event) {
+            if (!gameActive) return;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+                case 'Space':
+                    // Handle jumping with better checks
+                    if (canJump && !isClimbing) {
+                        // Only allow jump if we haven't jumped too recently (prevents jump spamming)
+                        const now = Date.now();
+                        if (now - lastJumpTime > 500) { // 500ms cooldown
+                            console.log("Jumping with velocity:", jumpVelocity);
+                            playerBody.velocity.y = jumpVelocity;
+                            canJump = false;
+                            lastJumpTime = now;
+                        }
+                    } else if (isClimbing) {
+                        // While climbing, space detaches from ladder
+                        isClimbing = false;
+                        climbingLadder = null;
+                    }
+                    break;
+                case 'KeyR':
+                    reload();
+                    break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    isRunning = true;
+                    break;
+                case 'KeyF': // Add key F to fix camera orientation
+                    resetCameraOrientation();
+                    console.log("Camera orientation reset");
+                    break;
+            }
+        }
+        
+        function onKeyUp(event) {
+            if (!gameActive) return;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    isRunning = false;
+                    break;
+            }
+        }
+        
+        function onMouseDown(event) {
+            if (!gameActive) return;
+            
+            if (event.button === 0) { // Left click
+                shoot();
+            }
+        }
+        
+        function onMouseMove(event) {
+            if (!gameActive || !document.pointerLockElement) return;
+            
+            const movementX = event.movementX || 0;
+            const movementY = event.movementY || 0;
+            
+            // Update camera rotation angles using euler angles
+            cameraYaw -= movementX * mouseSensitivity;
+            cameraPitch -= movementY * mouseSensitivity;
+            
+            // Clamp the pitch to avoid flipping
+            cameraPitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cameraPitch));
+            
+            // Apply rotation to camera using quaternions for smooth rotation
+            const euler = new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ');
+            camera.quaternion.setFromEuler(euler);
+        }
+        
+        function onPointerLockChange() {
+            if (document.pointerLockElement !== document.body) {
+                // Pointer lock was exited
+                if (gameActive) {
+                    // Pause game
+                    // Could implement a pause menu here
+                }
+            }
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function applyWeaponRecoil() {
+            // Apply recoil animation to weapon model
+            const weaponModel = document.getElementById('weaponModel');
+            weaponModel.style.transform = 'translate(-10px, 10px) rotate(5deg)';
+            
+            setTimeout(() => {
+                weaponModel.style.transform = 'none';
+            }, 100);
+            
+            // Apply camera shake
+            const shakeAmount = 0.01;
+            camera.position.y += shakeAmount;
+            
+            // Store the current camera rotation to restore it properly
+            const originalRotation = camera.rotation.z;
+            
+            // Apply a small random rotation for recoil effect
+            camera.rotation.z += (Math.random() - 0.5) * shakeAmount;
+            
+            setTimeout(() => {
+                // Restore the original camera rotation to prevent accumulation of errors
+                camera.rotation.z = originalRotation;
+            }, 100);
+        }
+        
+        function createShellCasing() {
+            // Create a shell casing particle
+            const shell = document.createElement('div');
+            shell.className = 'particle';
+            shell.style.backgroundColor = '#ffcc00';
+            shell.style.width = '5px';
+            shell.style.height = '10px';
+            shell.style.borderRadius = '2px';
+            shell.style.position = 'absolute';
+            shell.style.bottom = '150px';
+            shell.style.right = '100px';
+            shell.style.opacity = '1';
+            shell.style.zIndex = '90';
+            
+            document.body.appendChild(shell);
+            
+            // Animate the shell ejection
+            let xVel = -5 - Math.random() * 3;
+            let yVel = 10 + Math.random() * 5;
+            let zVel = 0;
+            let rotVel = 10 + Math.random() * 20;
+            let opacity = 1;
+            let bottom = 150;
+            let right = 100;
+            let rotation = 0;
+            
+            const animateShell = () => {
+                // Apply gravity
+                yVel -= 1;
+                
+                // Update position
+                bottom += yVel;
+                right += xVel;
+                rotation += rotVel;
+                
+                // Apply air resistance
+                xVel *= 0.95;
+                rotVel *= 0.95;
+                
+                // Update shell style
+                shell.style.bottom = `${bottom}px`;
+                shell.style.right = `${right}px`;
+                shell.style.transform = `rotate(${rotation}deg)`;
+                
+                // Check if shell is on the ground
+                if (bottom <= 0) {
+                    bottom = 0;
+                    yVel *= -0.5;
+                    xVel *= 0.7;
+                    
+                    // Start fading out
+                    opacity -= 0.05;
+                    shell.style.opacity = opacity.toString();
+                    
+                    if (opacity <= 0) {
+                        shell.remove();
+                        return;
+                    }
+                }
+                
+                requestAnimationFrame(animateShell);
+            };
+            
+            requestAnimationFrame(animateShell);
+        }
+        
+        function updateBullets(delta) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Update position
+                bullet.mesh.position.x += bullet.direction.x * bullet.speed;
+                bullet.mesh.position.y += bullet.direction.y * bullet.speed;
+                bullet.mesh.position.z += bullet.direction.z * bullet.speed;
+                
+                // Update time to live
+                bullet.timeToLive -= delta;
+                
+                // Check for collision with enemies
+                for (let j = 0; j < enemies.length; j++) {
+                    const enemy = enemies[j];
+                    
+                    if (!enemy.isDead && bullet.mesh.position.distanceTo(enemy.mesh.position) < 1) {
+                        // Enemy hit
+                        const killed = enemy.takeDamage(bullet.damage);
+                        
+                        if (killed) {
+                            score += 100;
+                            updateUI();
+                            
+                            // Check if all enemies are dead
+                            if (enemies.every(e => e.isDead)) {
+                                // Mission complete
+                                endGame(true);
+                            }
+                        }
+                        
+                        // Create impact effect
+                        createImpactEffect(bullet.mesh.position, bullet.direction, true);
+                        
+                        // Remove bullet
+                        scene.remove(bullet.mesh);
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // Check if bullet has expired
+                if (bullet.timeToLive <= 0) {
+                    scene.remove(bullet.mesh);
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collision with environment
+                const bulletRay = new THREE.Raycaster(
+                    new THREE.Vector3().copy(bullet.mesh.position).sub(bullet.direction.clone().multiplyScalar(0.5)),
+                    bullet.direction,
+                    0,
+                    0.5
+                );
+                
+                const intersects = bulletRay.intersectObjects(objects);
+                if (intersects.length > 0) {
+                    // Create impact effect
+                    createImpactEffect(bullet.mesh.position, bullet.direction);
+                    
+                    scene.remove(bullet.mesh);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        function createImpactEffect(position, direction, isBlood = false) {
+            // Create a small particle system for bullet impact
+            const particleCount = isBlood ? 20 : 10;
+            const particles = new THREE.BufferGeometry();
+            
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+            
+            const color = new THREE.Color(isBlood ? 0xcc0000 : 0xffaa00); // Blood red or orange spark color
+            
+            for (let i = 0; i < particleCount; i++) {
+                // Position particles at impact point
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+                
+                positions[ix] = position.x;
+                positions[iy] = position.y;
+                positions[iz] = position.z;
+                
+                colors[ix] = color.r;
+                colors[iy] = color.g;
+                colors[iz] = color.b;
+                
+                sizes[i] = 0.1 + Math.random() * 0.2;
+            }
+            
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            // Particle material
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 0.2,
+                color: isBlood ? 0xcc0000 : 0xffaa00,
+                vertexColors: false,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true
+            });
+            
+            // Create the particle system
+            const particleSystem = new THREE.Points(particles, particleMaterial);
+            scene.add(particleSystem);
+            
+            // Create velocities for particles
+            const velocities = [];
+            for (let i = 0; i < particleCount; i++) {
+                // Create a random velocity in a cone opposite to the impact direction
+                const vel = new THREE.Vector3(
+                    -direction.x + (Math.random() - 0.5) * 0.8,
+                    -direction.y + (Math.random() - 0.5) * 0.8,
+                    -direction.z + (Math.random() - 0.5) * 0.8
+                );
+                vel.normalize().multiplyScalar(0.1 + Math.random() * 0.2);
+                velocities.push(vel);
+            }
+            
+            // Animate particles
+            let lifetime = isBlood ? 1.0 : 0.5;
+            const updateParticles = () => {
+                lifetime -= 0.05;
+                
+                if (lifetime <= 0) {
+                    scene.remove(particleSystem);
+                    return;
+                }
+                
+                const positions = particleSystem.geometry.attributes.position.array;
+                
+                for (let i = 0; i < particleCount; i++) {
+                    const ix = i * 3;
+                    const iy = i * 3 + 1;
+                    const iz = i * 3 + 2;
+                    
+                    positions[ix] += velocities[i].x;
+                    positions[iy] += velocities[i].y;
+                    positions[iz] += velocities[i].z;
+                    
+                    // Add gravity
+                    velocities[i].y -= 0.005;
+                }
+                
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                
+                // Fade out
+                particleMaterial.opacity = lifetime / (isBlood ? 1.0 : 0.5);
+                
+                requestAnimationFrame(updateParticles);
+            };
+            
+            requestAnimationFrame(updateParticles);
+        }
+        
+        function takeDamage(amount) {
+            health -= amount;
+            
+            if (health <= 0) {
+                health = 0;
+                endGame(false);
+            }
+            
+            // Show damage overlay
+            const overlay = document.getElementById('damageOverlay');
+            overlay.style.backgroundColor = `rgba(255, 0, 0, ${amount / 100})`;
+            
+            // Add screen shake
+            camera.position.x += (Math.random() - 0.5) * 0.2;
+            camera.position.y += (Math.random() - 0.5) * 0.2;
+            camera.position.z += (Math.random() - 0.5) * 0.2;
+            
+            setTimeout(() => {
+                overlay.style.backgroundColor = 'rgba(255, 0, 0, 0)';
+            }, 300);
+            
+            updateUI();
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+            document.getElementById('health').textContent = `Health: ${health}`;
+            document.getElementById('ammo').textContent = `Ammo: ${currentAmmo}/${totalAmmo}`;
+        }
+        
+        function updateWeaponBob(delta, isMoving) {
+            const weaponModel = document.getElementById('weaponModel');
+            
+            if (isMoving) {
+                // Calculate weapon bob
+                weaponBobAmount += delta * 5 * weaponBobDirection;
+                
+                if (weaponBobAmount > 1) {
+                    weaponBobDirection = -1;
+                } else if (weaponBobAmount < -1) {
+                    weaponBobDirection = 1;
+                }
+                
+                const bobX = Math.sin(weaponBobAmount * 2) * 3;
+                const bobY = Math.abs(Math.sin(weaponBobAmount)) * 2;
+                
+                // Apply the bob effect
+                weaponModel.style.transform = `translate(${bobX}px, ${bobY}px)`;
+            } else {
+                // Gradually return to center position
+                weaponBobAmount *= 0.9;
+                
+                if (Math.abs(weaponBobAmount) < 0.01) {
+                    weaponBobAmount = 0;
+                    weaponModel.style.transform = 'none';
+                } else {
+                    const bobX = Math.sin(weaponBobAmount * 2) * 3;
+                    const bobY = Math.abs(Math.sin(weaponBobAmount)) * 2;
+                    weaponModel.style.transform = `translate(${bobX}px, ${bobY}px)`;
+                }
+            }
+        }
+        
+        function checkLadderInteraction() {
+            // If already climbing, check if we're still on the ladder
+            if (isClimbing) {
+                const ladder = climbingLadder;
+                const ladderTop = ladder.position.y + ladder.height;
+                const ladderBottom = ladder.position.y;
+                
+                // Check if player is still within ladder height range
+                if (camera.position.y < ladderBottom || camera.position.y > ladderTop + playerHeight) {
+                    isClimbing = false;
+                    climbingLadder = null;
+                }
+                return;
+            }
+            
+            // Check for nearby ladders
+            for (let i = 0; i < climbableLadders.length; i++) {
+                const ladder = climbableLadders[i];
+                const ladderPos = new THREE.Vector3(
+                    ladder.position.x,
+                    ladder.position.y + ladder.height / 2,
+                    ladder.position.z
+                );
+                
+                // Check if player is close to the ladder
+                const dist = new THREE.Vector3(
+                    camera.position.x - ladderPos.x,
+                    0, // Ignore vertical distance
+                    camera.position.z - ladderPos.z
+                ).length();
+                
+                if (dist < ladder.width / 2 + 1) {
+                    // Player is near a ladder
+                    if (moveForward) {
+                        // Start climbing
+                        isClimbing = true;
+                        climbingLadder = ladder;
+                        return;
+                    }
+                }
+            }
+        }
+        
+        function updateDebugInfo() {
+            if (!debug) {
+                document.getElementById('debug').style.display = 'none';
+                document.getElementById('jumpIndicator').style.display = 'none';
+                return;
+            }
+            
+            // Update debug text info
+            const debugElem = document.getElementById('debug');
+            debugElem.style.display = 'block';
+            debugElem.innerHTML = `
+                Position: X: ${camera.position.x.toFixed(2)}, Y: ${camera.position.y.toFixed(2)}, Z: ${camera.position.z.toFixed(2)}<br>
+                Velocity: X: ${playerBody.velocity.x.toFixed(2)}, Y: ${playerBody.velocity.y.toFixed(2)}, Z: ${playerBody.velocity.z.toFixed(2)}<br>
+                Can Jump: ${canJump}<br>
+                Last Jump: ${((Date.now() - lastJumpTime) / 1000).toFixed(1)}s ago<br>
+                Is Climbing: ${isClimbing}<br>
+                Climbing Ladder: ${climbingLadder ? 'Yes' : 'No'}<br>
+                Yaw: ${cameraYaw.toFixed(2)}, Pitch: ${cameraPitch.toFixed(2)}<br>
+                [P] toggle debug | [F] reset camera
+            `;
+            
+            // Update jump indicator
+            const jumpIndicator = document.getElementById('jumpIndicator');
+            jumpIndicator.style.display = 'block';
+            jumpIndicator.style.backgroundColor = canJump ? 'green' : 'red';
+        }
+        
+        // Initialize the game
+        init();
+    </script>
+</body>
+</html>

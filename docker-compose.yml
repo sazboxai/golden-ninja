@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  game-server:
+    build: .
+    ports:
+      - "8999:8989"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production 
