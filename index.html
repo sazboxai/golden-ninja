@@ -2464,10 +2464,11 @@
                     roomId: roomIdFromUrl,
                     serverUrl: window.location.origin,
                     updateRate: 50, // Update 20 times per second
+                    secure: true, // Enable secure connection
+                    rejectUnauthorized: false, // Allow self-signed certificates
                     
                     // Convert local player state to network format
                     stateAdapter: function() {
-                        // Return current player state
                         return {
                             position: {
                                 x: camera.position.x,
@@ -2484,6 +2485,12 @@
                             shooting: false,
                             isReloading: isReloading
                         };
+                    },
+                    
+                    // Socket.io configuration
+                    socketOptions: {
+                        secure: true,
+                        rejectUnauthorized: false // Required for self-signed certificates
                     },
                     
                     // Handle received state from other players

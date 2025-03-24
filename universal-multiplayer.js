@@ -29,7 +29,10 @@
       console.log(`Connecting to server: ${this.serverUrl}`);
       
       try {
-        this.socket = io(this.serverUrl);
+        this.socket = io(this.serverUrl, {
+          secure: true,
+          rejectUnauthorized: false // Required for self-signed certificates
+        });
         
         this.socket.on('connect', () => {
           this.connected = true;
